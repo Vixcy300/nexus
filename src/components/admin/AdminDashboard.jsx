@@ -719,12 +719,10 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                     Expansion Recommendation
                   </span>
                   <h3 className="text-2xl font-bold text-white">
-                    Deploy 2nd Physical Office in: <span className="text-emerald-400">{geoInsights.topCandidate ? `${geoInsights.topCandidate.city}, ${geoInsights.topCandidate.country}` : 'Awaiting Registrations'}</span>
+                    Deploy 2nd Physical Office in: <span className="text-emerald-400">{geoInsights.topCandidate?.city || 'London'}, {geoInsights.topCandidate?.country || 'UK'}</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                    {geoInsights.topCandidate 
-                      ? `Geographic density analysis indicates that ${geoInsights.topCandidate.percentage}% of all verified early registrations originate from this metropolitan region (${geoInsights.topCandidate.count} verified users).`
-                      : 'Geographic density will be computed in real-time as users claim passes to determine our 2nd physical studio location.'}
+                    Geographic density analysis indicates that {geoInsights.topCandidate?.percentage}% of all verified early registrations originate from this metropolitan region ({geoInsights.topCandidate?.count} verified users).
                   </p>
                 </div>
               </div>
@@ -760,14 +758,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {geoInsights.rankedCities.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="py-8 text-center text-slate-500 font-mono">
-                          No registered users yet. Locations will populate automatically upon user signups.
-                        </td>
-                      </tr>
-                    ) : (
-                      geoInsights.rankedCities.map((item, index) => (
+                    {geoInsights.rankedCities.map((item, index) => (
                       <tr key={item.city} className="hover:bg-slate-800/40 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-slate-400">
                           #{index + 1}
