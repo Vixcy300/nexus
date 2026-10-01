@@ -247,6 +247,67 @@ const INITIAL_REFERRAL_CODES = [
   { code: 'ARCH-LONDON-05', status: 'redeemed', createdAt: '2026-09-25', redeemedBy: 'charlotte@shoreditch-arch.co.uk', redeemedAt: '2026-09-29T17:30:00.000Z' }
 ];
 
+export const getQuotaSettings = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.QUOTA);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return { totalQuota: TOTAL_FREE_QUOTA, manualRemaining: null };
+};
+
+export const getRemainingSlots = () => {
+  const settings = getQuotaSettings();
+  const users = getStoredUsers();
+  if (settings.manualRemaining !== null && settings.manualRemaining !== undefined && !isNaN(settings.manualRemaining)) {
+    return Math.max(0, parseInt(settings.manualRemaining, 10));
+  }
+  const total = settings.totalQuota || TOTAL_FREE_QUOTA;
+  return Math.max(0, total - users.length);
+};
+
+export const setRemainingSlotsCount = (newCount) => {
+  const current = getQuotaSettings();
+  const count = parseInt(newCount, 10);
+  const updated = {
+    ...current,
+    manualRemaining: isNaN(count) ? null : Math.max(0, count)
+  };
+  localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+  return getRemainingSlots();
+};
+
+export const resetRemainingSlotsToAuto = () => {
+  const current = getQuotaSettings();
+  const updated = {
+    ...current,
+    manualRemaining: null
+  };
+  localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+  return getRemainingSlots();
+};
+
+export const setTotalQuota = (newQuota) => {
+  const current = getQuotaSettings();
+  const q = parseInt(newQuota, 10) || TOTAL_FREE_QUOTA;
+  const updated = {
+    ...current,
+    totalQuota: q
+  };
+  localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+  return getRemainingSlots();
+};
+
 export const getStoredUsers = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.USERS);
@@ -346,6 +407,19 @@ export const registerUser = ({ name, email, age, profession, referralCode, locat
   localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
   localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(updatedCodes));
 
+  // If manualRemaining override was active, decrement it by 1
+  try {
+    const quotaSettings = getQuotaSettings();
+    if (quotaSettings.manualRemaining !== null && quotaSettings.manualRemaining !== undefined && quotaSettings.manualRemaining > 0) {
+      quotaSettings.manualRemaining = Math.max(0, quotaSettings.manualRemaining - 1);
+      localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(quotaSettings));
+    }
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+
   return newUser;
 };
 
@@ -414,7 +488,7 @@ export const getGeographicInsights = () => {
 
   return {
     totalUsers: users.length,
-    remainingSlots: Math.max(0, TOTAL_FREE_QUOTA - users.length),
+    remainingSlots: getRemainingSlots(),
     rankedCities,
     countryBreakdown: countryMap,
     topCandidate

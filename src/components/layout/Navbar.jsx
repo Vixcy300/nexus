@@ -114,3 +114,4 @@ export default function Navbar({ onOpenAccessModal, remainingSlots = 988 }) {
     </>
   );
 }
+

@@ -141,3 +141,4 @@ export default function Hero({ onOpenAccessModal, remainingSlots = 988 }) {
     </section>
   );
 }
+
