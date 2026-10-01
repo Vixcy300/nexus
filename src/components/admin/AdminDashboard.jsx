@@ -57,6 +57,18 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     }
   }, [isOpen]);
 
+  // Live refresh: auto-update when a user registers or codes change (even while panel is open)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleLiveUpdate = () => refreshData();
+    window.addEventListener('nexus_slots_updated', handleLiveUpdate);
+    window.addEventListener('storage', handleLiveUpdate);
+    return () => {
+      window.removeEventListener('nexus_slots_updated', handleLiveUpdate);
+      window.removeEventListener('storage', handleLiveUpdate);
+    };
+  }, [isOpen]);
+
   const refreshData = () => {
     const u = getStoredUsers();
     const c = getStoredReferralCodes();
