@@ -4,23 +4,23 @@ export default function StorySection() {
   const chapters = [
     {
       num: '01',
-      title: 'The world drowns in mediocre digital products.',
-      p1: 'Look at the tools you use every day. Most are clunky, slow, or just plain boring. The baseline for digital experiences has settled somewhere between "barely functional" and "forgettable."',
-      p2: 'Companies bleed revenue not because their idea is flawed, but because their execution lacks soul. In a sea of templates, average is the most dangerous place a brand can be.',
+      title: 'Architecture is suffocated by redundant drafting.',
+      p1: 'Practicing architects and students spend over 65% of their production hours recreating standard CAD blocks, fighting broken Revit families, and fixing dimension overrides.',
+      p2: 'Creative momentum evaporates when you have to redraw the same door schedule, window mullion detail, and title block across every single project file.',
       align: 'left'
     },
     {
       num: '02',
-      title: 'We believe every company deserves a world-class digital presence.',
-      p1: 'Your product is your absolute best salesperson. It doesn\'t sleep, it doesn\'t take days off. It should feel intuitive, look striking, and function flawlessly.',
-      p2: 'We reject the compromise between aesthetic beauty and technical performance. The best digital products do both beautifully.',
+      title: 'We believe architectural intelligence should be instant & parametric.',
+      p1: 'Modern studios need tools that work at the speed of thought. Dynamic blocks that stretch seamlessly, Revit BIM families with clean shared parameters, and AI prompts that turn text into structural concepts.',
+      p2: 'We bridge precision engineering with generative AI—giving students and firms the tools to design tomorrow\'s skyline without the friction of yesterday\'s tools.',
       align: 'right'
     },
     {
       num: '03',
-      title: 'So we built a studio that does it differently.',
-      p1: 'No fluff. No bloated agency retainers. Just a ruthless focus on building what matters with the best craft possible.',
-      p2: 'From deep strategic foundations to pixel-perfect execution, our process is designed to push your brand from where it is to where it simply must be.',
+      title: 'So we built NEXUS: Free for the first 1,000 pioneers.',
+      p1: 'Zero recurring subscriptions. Zero paywalled CAD blocks. We are empowering the first 1,000 verified architects, engineers, and students with 100% free lifetime access.',
+      p2: 'Every user helps us map global demand density as we prepare to establish our second international architecture and research studio.',
       align: 'center'
     }
   ]
@@ -103,3 +103,4 @@ export default function StorySection() {
     </section>
   )
 }
+

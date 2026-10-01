@@ -5,11 +5,31 @@ import MagneticButton from '../ui/MagneticButton'
 
 export default function TestimonialsCarousel() {
   const testimonials = [
-    { quote: "NEXUS transformed our entire digital presence. We went from embarrassed to proud in 12 weeks.", author: "CEO", company: "Vanta Finance" },
-    { quote: "The strategy session alone was worth the entire engagement cost.", author: "Founder", company: "Bloom Health" },
-    { quote: "They think like founders, not vendors. Rare.", author: "CTO", company: "Orbit SaaS" },
-    { quote: "Delivered 3 weeks early. Never happens with agencies.", author: "Product Lead", company: "Crest Retail" },
-    { quote: "Our Clutch review says 5 stars. Honestly, we'd give 6.", author: "CMO", company: "Frameshift" }
+    { 
+      quote: "The dynamic AutoCAD blocks cut our detailing time in half across our entire studio. Everything is AIA-compliant out of the box.", 
+      author: "Senior Associate", 
+      company: "Foster + Partners Alumni Network (London)" 
+    },
+    { 
+      quote: "Revit families are usually bloated with junk parameters. NEXUS families are clean, lightweight, and schedule flawlessly with zero warnings.", 
+      author: "Lead BIM Coordinator", 
+      company: "Studio Indus (Bangalore)" 
+    },
+    { 
+      quote: "Generating structural facade concepts with NEXUS AI prompts and feeding them into Dynamo gave us 20 valid schemes in one afternoon.", 
+      author: "Computational Designer", 
+      company: "Berlin Architekten Lab (Berlin)" 
+    },
+    { 
+      quote: "As an architecture student, having free access to production-grade AIA CAD templates elevated the quality of my thesis portfolio tenfold.", 
+      author: "M.Arch Candidate", 
+      company: "NUS Architecture School (Singapore)" 
+    },
+    { 
+      quote: "100% free lifetime access with unrestricted commercial rights is unheard of in AEC software. NEXUS is setting a brand new benchmark.", 
+      author: "Principal Architect", 
+      company: "Manhattan Urban Studio (New York)" 
+    }
   ]
 
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -17,7 +37,7 @@ export default function TestimonialsCarousel() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % testimonials.length)
-    }, 5000)
+    }, 6000)
     return () => clearInterval(timer)
   }, [testimonials.length])
 
@@ -43,15 +63,15 @@ export default function TestimonialsCarousel() {
               transition={{ duration: 0.5 }}
               className="flex flex-col items-center"
             >
-              <h3 className="font-display text-3xl md:text-5xl lg:text-6xl leading-tight mb-12">
-                {testimonials[currentIndex].quote}
+              <h3 className="font-display text-2xl sm:text-4xl md:text-5xl leading-tight mb-12 tracking-tight">
+                "{testimonials[currentIndex].quote}"
               </h3>
               
               <div>
-                <p className="font-mono text-signal uppercase tracking-widest text-sm mb-1">
+                <p className="font-mono text-signal uppercase tracking-widest text-sm mb-1 font-semibold">
                   {testimonials[currentIndex].author}
                 </p>
-                <p className="font-body text-mist-700">
+                <p className="font-body text-mist-700 text-sm">
                   {testimonials[currentIndex].company}
                 </p>
               </div>
@@ -62,10 +82,10 @@ export default function TestimonialsCarousel() {
         {/* Navigation */}
         <div className="mt-20 flex flex-col sm:flex-row items-center justify-between gap-8 relative z-10">
           <div className="flex gap-4">
-            <MagneticButton onClick={prev} className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 hover:border-white/30 transition-colors">
+            <MagneticButton onClick={prev} className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 hover:border-white/30 transition-colors cursor-pointer">
               <ChevronLeft size={20} />
             </MagneticButton>
-            <MagneticButton onClick={next} className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 hover:border-white/30 transition-colors">
+            <MagneticButton onClick={next} className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 hover:border-white/30 transition-colors cursor-pointer">
               <ChevronRight size={20} />
             </MagneticButton>
           </div>
@@ -75,7 +95,7 @@ export default function TestimonialsCarousel() {
               <button
                 key={i}
                 onClick={() => setCurrentIndex(i)}
-                className={`w-2 h-2 rounded-full transition-all duration-300 ${i === currentIndex ? 'bg-signal w-6' : 'bg-white/20 hover:bg-white/40'}`}
+                className={`w-2 h-2 rounded-full transition-all duration-300 cursor-pointer ${i === currentIndex ? 'bg-signal w-6' : 'bg-white/20 hover:bg-white/40'}`}
                 aria-label={`Go to testimonial ${i + 1}`}
               />
             ))}
@@ -86,3 +106,4 @@ export default function TestimonialsCarousel() {
     </section>
   )
 }
+

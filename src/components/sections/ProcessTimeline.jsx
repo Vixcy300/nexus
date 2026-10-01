@@ -10,16 +10,15 @@ export default function ProcessTimeline() {
     offset: ["start center", "end end"]
   })
 
-  // We draw the vertical line from top to bottom
   const scaleY = useTransform(scrollYProgress, [0, 1], [0, 1])
 
   const steps = [
-    { title: "Discovery Call", tagline: "15 minutes that change everything", desc: "A brief alignment on your goals, timeline, constraints, and budget. No pressure, just clarity.", duration: "Day 0" },
-    { title: "Deep Dive Workshop", tagline: "We become obsessed with your problem", desc: "We map user journeys, run competitive analysis, and unearth the technical constraints before writing a single line of code.", duration: "Week 1" },
-    { title: "Strategy Blueprint", tagline: "Your roadmap to digital dominance", desc: "We deliver a comprehensive architecture, proposed design system foundations, and technical stack choices.", duration: "Week 2" },
-    { title: "Design Sprints", tagline: "Pixels become possibilities", desc: "Weekly agile sprints. You get access to live Figma files and daily async updates. Feedback loops are tight and fast.", duration: "Weeks 3-5" },
-    { title: "Build & Iterate", tagline: "We ship. You approve. We refine.", desc: "Engineering happens transparently. We push to staging environments continuously so you can test as we build.", duration: "Weeks 4-7" },
-    { title: "Launch & Grow", tagline: "The beginning, not the end", desc: "Go-live is orchestrated meticulously. We set up analytics, monitor performance, and hand over the keys (or stay on for support).", duration: "Week 8+" }
+    { title: "Instant DWG Starter Sets", tagline: "AIA layer standards from minute one", desc: "Open pre-configured AutoCAD .DWG templates with dynamic blocks, standard line-weights, CTB plot styles, and automated viewport scales.", duration: "Phase 01" },
+    { title: "Parametric Revit Injection", tagline: "LOD 200–400 smart BIM families", desc: "Load nested BIM families with bidirectional shared parameters, schedule formulas, and zero clash warnings in Revit 2021–2026.", duration: "Phase 02" },
+    { title: "AI Prompt Generative Studio", tagline: "From text prompt to structural concept", desc: "Harness engineered prompt syntax for Midjourney v6, ControlNet CAD line-art, and SDXL to generate photorealistic elevations, materials, and massing.", duration: "Phase 03" },
+    { title: "Clash-Free Coordination", tagline: "Pre-vetted for Navisworks validation", desc: "Every family is rigorously tested against standard clearance geometries to guarantee seamless architectural and structural coordination.", duration: "Phase 04" },
+    { title: "One-Click Production Vault", tagline: "Ready for construction document issue", desc: "Export sheets, details, and schedules ready for municipal submissions and client presentations with zero manual overrides.", duration: "Phase 05" },
+    { title: "100% Free Lifetime Pass", tagline: "For the first 1,000 pioneer architects", desc: "Enter your referral code to unlock unrestricted access forever. Help us identify global architectural hubs for our 2nd international studio.", duration: "Pioneer" }
   ]
 
   const StepItem = ({ step, index }) => {
@@ -74,8 +73,8 @@ export default function ProcessTimeline() {
     <section ref={containerRef} className="bg-ink-900 relative" id="process">
       <div className="max-w-7xl mx-auto px-6 md:px-12 pt-32 pb-16">
         <ScrollReveal>
-          <p className="font-mono text-xs text-signal uppercase tracking-widest mb-4">Process</p>
-          <h2 className="font-display text-5xl md:text-7xl font-bold tracking-tight">How we get there.</h2>
+          <p className="font-mono text-xs text-signal uppercase tracking-widest mb-4">Pipeline</p>
+          <h2 className="font-display text-5xl md:text-7xl font-bold tracking-tight">How architects build with NEXUS.</h2>
         </ScrollReveal>
       </div>
 
@@ -98,7 +97,6 @@ export default function ProcessTimeline() {
             <StepItem key={index} step={step} index={index} />
           ))}
         </div>
-
       </div>
     </section>
   )
