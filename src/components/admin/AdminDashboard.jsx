@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  X, Users, Key, MapPin, Globe, Download, Plus, Copy, Check, 
-  Trash2, Search, Filter, RefreshCw, Building, Award, Compass, Radio,
-  LogOut, ShieldAlert
+  X, Users, Key, Globe, Download, Plus, Copy, Check, 
+  Trash2, Search, Sliders, LogOut, CheckCircle2
 } from 'lucide-react';
 import { 
   getStoredUsers, 
@@ -13,13 +11,34 @@ import {
   getGeographicInsights, 
   resetStoreToMockData, 
   logoutAdmin, 
-  TOTAL_FREE_QUOTA 
+  getQuotaSettings,
+  setRemainingSlotsCount,
+  resetRemainingSlotsToAuto,
+  setTotalQuota
 } from '../../services/storeService';
 
 export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
-  const [activeTab, setActiveTab] = useState('geo'); // 'geo' | 'referrals' | 'users'
+  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'referrals' | 'geo'
   const [users, setUsers] = useState(getStoredUsers());
   const [codes, setCodes] = useState(getStoredReferralCodes());
+
+  // Quota & Slots state
+  const [quotaSettings, setQuotaState] = useState(getQuotaSettings());
+  const [customSlotsInput, setCustomSlotsInput] = useState(quotaSettings.remainingSlots);
+  const [customQuotaInput, setCustomQuotaInput] = useState(quotaSettings.totalQuota);
+  const [quotaFeedback, setQuotaFeedback] = useState('');
+
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [professionFilter, setProfessionFilter] = useState('all');
+
+  // Referral code generator
+  const [genCount, setGenCount] = useState(5);
+  const [genPrefix, setGenPrefix] = useState('NEXUS');
+
+  // Copy feedback
+  const [copiedCode, setCopiedCode] = useState(null);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -31,23 +50,22 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Search and filter for users table
-  const [searchQuery, setSearchQuery] = useState('');
-  const [professionFilter, setProfessionFilter] = useState('all');
+  // Sync state whenever opened
+  useEffect(() => {
+    if (isOpen) {
+      refreshData();
+    }
+  }, [isOpen]);
 
-  // Referral code generation state
-  const [genCount, setGenCount] = useState(5);
-  const [genPrefix, setGenPrefix] = useState('ARCH');
-  const [showGenModal, setShowGenModal] = useState(false);
-
-  // Copy feedback state
-  const [copiedCode, setCopiedCode] = useState(null);
-  const [copiedAll, setCopiedAll] = useState(false);
-
-  // Refresh local data state
   const refreshData = () => {
-    setUsers(getStoredUsers());
-    setCodes(getStoredReferralCodes());
+    const u = getStoredUsers();
+    const c = getStoredReferralCodes();
+    const q = getQuotaSettings();
+    setUsers(u);
+    setCodes(c);
+    setQuotaState(q);
+    setCustomSlotsInput(q.remainingSlots);
+    setCustomQuotaInput(q.totalQuota);
     if (onRefreshData) onRefreshData();
   };
 
@@ -55,20 +73,19 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     return getGeographicInsights();
   }, [users]);
 
-  // Derived referral stats
   const availableCodes = useMemo(() => codes.filter(c => c.status === 'available'), [codes]);
   const redeemedCodes = useMemo(() => codes.filter(c => c.status === 'redeemed'), [codes]);
-  const remainingFreeSlots = Math.max(0, TOTAL_FREE_QUOTA - users.length);
 
   // Filtered users
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
+      const q = searchQuery.toLowerCase();
       const matchesSearch = 
-        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.referralCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.location.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.location.country.toLowerCase().includes(searchQuery.toLowerCase());
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.referralCode.toLowerCase().includes(q) ||
+        u.location.city.toLowerCase().includes(q) ||
+        u.location.country.toLowerCase().includes(q);
       
       const matchesProfession = 
         professionFilter === 'all' || u.profession.toLowerCase().includes(professionFilter.toLowerCase());
@@ -77,6 +94,46 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     });
   }, [users, searchQuery, professionFilter]);
 
+  // Quota Handlers
+  const handleUpdateSlots = (e) => {
+    e.preventDefault();
+    const val = parseInt(customSlotsInput, 10);
+    if (isNaN(val) || val < 0) {
+      setQuotaFeedback('Please enter a valid non-negative number.');
+      return;
+    }
+    const updated = setRemainingSlotsCount(val);
+    setQuotaState(updated);
+    setQuotaFeedback(`Remaining slots set to ${val} live across the website.`);
+    setTimeout(() => setQuotaFeedback(''), 3500);
+    if (onRefreshData) onRefreshData();
+  };
+
+  const handleResetSlotsAuto = () => {
+    const updated = resetRemainingSlotsToAuto();
+    setQuotaState(updated);
+    setCustomSlotsInput(updated.remainingSlots);
+    setQuotaFeedback(`Auto-recalculated: ${updated.remainingSlots} remaining slots based on total quota minus registered users.`);
+    setTimeout(() => setQuotaFeedback(''), 3500);
+    if (onRefreshData) onRefreshData();
+  };
+
+  const handleSaveTotalQuota = (e) => {
+    e.preventDefault();
+    const val = parseInt(customQuotaInput, 10);
+    if (isNaN(val) || val <= 0) {
+      setQuotaFeedback('Please enter a valid positive number for total quota.');
+      return;
+    }
+    const updated = setTotalQuota(val);
+    setQuotaState(updated);
+    setCustomSlotsInput(updated.remainingSlots);
+    setQuotaFeedback(`Campaign total quota updated to ${val} passes.`);
+    setTimeout(() => setQuotaFeedback(''), 3500);
+    if (onRefreshData) onRefreshData();
+  };
+
+  // Referral Handlers
   const handleCopySingleCode = (code) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
@@ -94,18 +151,17 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     e.preventDefault();
     generateReferralCodes(parseInt(genCount, 10) || 5, genPrefix);
     refreshData();
-    setShowGenModal(false);
   };
 
   const handleDeleteCode = (code) => {
-    if (window.confirm(`Are you sure you want to remove referral code ${code}?`)) {
+    if (window.confirm(`Delete referral code ${code}?`)) {
       deleteReferralCode(code);
       refreshData();
     }
   };
 
   const handleResetData = () => {
-    if (window.confirm('Reset database to pre-seeded architectural demo data?')) {
+    if (window.confirm('Reset database to default seed data?')) {
       resetStoreToMockData();
       refreshData();
     }
@@ -133,7 +189,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `archnexus_users_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `nexus_users_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -143,7 +199,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(users, null, 2));
     const dlAnchorElem = document.createElement('a');
     dlAnchorElem.setAttribute('href', dataStr);
-    dlAnchorElem.setAttribute('download', `archnexus_users_${new Date().toISOString().split('T')[0]}.json`);
+    dlAnchorElem.setAttribute('download', `nexus_users_${new Date().toISOString().split('T')[0]}.json`);
     dlAnchorElem.click();
   };
 
@@ -155,44 +211,43 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] bg-ink-950 flex flex-col overflow-hidden text-mist-100 font-body">
+    <div className="fixed inset-0 z-[120] bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden">
       
-      {/* Top Navbar */}
-      <header className="bg-ink-900 border-b border-white/10 px-6 py-4 flex items-center justify-between shrink-0">
+      {/* Top Header Bar */}
+      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-display text-xl font-bold text-white tracking-tight">ARCHVIBE</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-signal text-ink-950 font-bold uppercase">
-              Admin OS
+            <span className="font-bold text-xl tracking-tight text-white">NEXUS</span>
+            <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-mono font-medium border border-emerald-500/30">
+              Admin Console
             </span>
           </div>
-
-          <div className="hidden md:flex items-center gap-2 text-xs font-mono text-mist-900 border-l border-white/10 pl-4">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>HQ Deployment & Quota Engine</span>
+          <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 border-l border-slate-800 pl-4 font-mono">
+            <span>Logged in as:</span>
+            <span className="text-slate-200 font-semibold">metheadminlover@gmail.com</span>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-1.5 bg-ink-950 p-1 rounded-xl border border-white/10">
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
           <button
-            onClick={() => setActiveTab('geo')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all flex items-center gap-2 ${
-              activeTab === 'geo'
-                ? 'bg-signal text-ink-950 shadow-sm'
-                : 'text-mist-700 hover:text-white'
+            onClick={() => setActiveTab('users')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'users'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Compass size={14} />
-            <span>2nd Office Geo Intelligence</span>
+            <Users size={14} />
+            <span>Users Directory ({users.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('referrals')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all flex items-center gap-2 ${
+            className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'referrals'
-                ? 'bg-signal text-ink-950 shadow-sm'
-                : 'text-mist-700 hover:text-white'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Key size={14} />
@@ -200,668 +255,554 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
           </button>
 
           <button
-            onClick={() => setActiveTab('users')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all flex items-center gap-2 ${
-              activeTab === 'users'
-                ? 'bg-signal text-ink-950 shadow-sm'
-                : 'text-mist-700 hover:text-white'
+            onClick={() => setActiveTab('geo')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'geo'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Users size={14} />
-            <span>Users Database ({users.length})</span>
+            <Globe size={14} />
+            <span>2nd Office Geo Analysis</span>
           </button>
         </div>
 
-        {/* Right actions */}
+        {/* Action Controls */}
         <div className="flex items-center gap-3">
           <button
             onClick={handleLogout}
-            title="Sign out of Admin Portal"
-            className="p-2 rounded-xl text-mist-700 hover:text-red-400 hover:bg-white/5 transition-colors font-mono text-xs flex items-center gap-1.5"
+            title="Sign out"
+            className="px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center gap-1.5 border border-slate-700"
           >
-            <LogOut size={16} />
-            <span className="hidden sm:inline">Logout</span>
+            <LogOut size={14} />
+            <span>Sign Out</span>
           </button>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-mist-700 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X size={20} />
           </button>
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
-        
-        {/* KPI Summary Cards */}
+
+        {/* Top 4 KPI Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          <div className="bg-ink-900/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <span className="font-mono text-xs text-mist-900 block mb-1">
-              Registered Early Users
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+            <span className="text-xs font-medium text-slate-400 block mb-1">
+              Registered Users
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="font-display text-3xl font-bold text-white">
-                {users.length} <span className="text-sm font-mono text-mist-900 font-normal">/ {TOTAL_FREE_QUOTA}</span>
+              <span className="text-3xl font-bold text-white">
+                {users.length} <span className="text-sm font-normal text-slate-400">/ {quotaSettings.totalQuota}</span>
               </span>
-              <span className="text-xs font-mono text-signal bg-signal/10 px-2 py-0.5 rounded">
-                {Math.round((users.length / TOTAL_FREE_QUOTA) * 100)}% Filled
+              <span className="text-xs font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                {Math.round((users.length / quotaSettings.totalQuota) * 100)}%
               </span>
             </div>
-            <div className="w-full bg-ink-950 h-1.5 rounded-full mt-3 overflow-hidden">
-              <div
-                className="bg-signal h-full rounded-full transition-all duration-500"
-                style={{ width: `${(users.length / TOTAL_FREE_QUOTA) * 100}%` }}
+            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div 
+                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, (users.length / quotaSettings.totalQuota) * 100)}%` }}
               />
             </div>
           </div>
 
-          <div className="bg-ink-900/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <span className="font-mono text-xs text-mist-900 block mb-1">
-              Free Slots Remaining
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+            <span className="text-xs font-medium text-slate-400 block mb-1">
+              Remaining Free Slots
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="font-display text-3xl font-bold text-emerald-400">
-                {remainingFreeSlots}
+              <span className="text-3xl font-bold text-emerald-400">
+                {quotaSettings.remainingSlots}
               </span>
-              <span className="text-xs font-mono text-mist-700">
-                Quota: 1,000 Max
+              <span className="text-xs text-slate-400">
+                Quota: {quotaSettings.totalQuota}
               </span>
             </div>
-            <span className="text-[11px] font-mono text-mist-900 mt-2 block">
-              100% Free Lifetime Tier Active
+            <span className="text-xs text-slate-500 mt-2 block">
+              Dynamic live counter displayed on website
             </span>
           </div>
 
-          <div className="bg-ink-900/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <span className="font-mono text-xs text-mist-900 block mb-1">
-              Referral Codes Status
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+            <span className="text-xs font-medium text-slate-400 block mb-1">
+              Referral Codes
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="font-display text-3xl font-bold text-white">
-                {availableCodes.length} <span className="text-sm font-mono text-mist-900 font-normal">Available</span>
+              <span className="text-3xl font-bold text-white">
+                {availableCodes.length} <span className="text-sm font-normal text-slate-400">Available</span>
               </span>
-              <span className="text-xs font-mono text-ember bg-ember/10 px-2 py-0.5 rounded">
+              <span className="text-xs font-mono bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">
                 {redeemedCodes.length} Used
               </span>
             </div>
-            <span className="text-[11px] font-mono text-mist-900 mt-2 block">
-              Total Created: {codes.length}
+            <span className="text-xs text-slate-500 mt-2 block">
+              Total created: {codes.length} codes
             </span>
           </div>
 
-          <div className="bg-ink-900/80 border border-signal/30 rounded-2xl p-5 backdrop-blur-md relative overflow-hidden">
-            <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-signal/5 rounded-full blur-xl" />
-            <span className="font-mono text-xs text-signal block mb-1 font-bold">
-              ★ 2nd Office Top Candidate
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+            <span className="text-xs font-medium text-emerald-400 block mb-1 font-semibold">
+              Top 2nd Office Candidate
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="font-display text-2xl font-bold text-white truncate">
+              <span className="text-2xl font-bold text-white truncate">
                 {geoInsights.topCandidate ? geoInsights.topCandidate.city : 'Analyzing...'}
               </span>
-              <span className="text-xs font-mono text-signal bg-signal/15 px-2 py-0.5 rounded">
-                {geoInsights.topCandidate ? `${geoInsights.topCandidate.percentage}% Density` : '0%'}
+              <span className="text-xs font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                {geoInsights.topCandidate ? `${geoInsights.topCandidate.percentage}% Share` : '0%'}
               </span>
             </div>
-            <span className="text-[11px] font-mono text-mist-700 mt-2 block truncate">
-              {geoInsights.topCandidate ? `${geoInsights.topCandidate.country} (${geoInsights.topCandidate.count} architects)` : 'Awaiting data'}
+            <span className="text-xs text-slate-400 mt-2 block truncate">
+              {geoInsights.topCandidate ? `${geoInsights.topCandidate.country} (${geoInsights.topCandidate.count} architects registered)` : 'Awaiting data'}
             </span>
           </div>
-
         </div>
 
-        {/* TAB 1: 2nd Office Geographic Intelligence Hub */}
-        {activeTab === 'geo' && (
-          <div className="space-y-6">
-            
-            {/* Top Recommendation Banner */}
-            <div className="bg-gradient-to-r from-ink-900 via-ink-850 to-ink-900 border border-signal/40 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-signal/15 border border-signal/40 flex items-center justify-center text-signal shrink-0">
-                  <Building size={28} />
-                </div>
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-signal/10 border border-signal/30 text-signal font-mono text-xs uppercase mb-2">
-                    <Award size={13} />
-                    Geographic Expansion Algorithm Recommendation
-                  </div>
-                  <h3 className="font-display text-2xl sm:text-3xl font-bold text-white">
-                    Deploy 2nd Physical Office in: <span className="text-signal">{geoInsights.topCandidate?.city || 'London'}, {geoInsights.topCandidate?.country || 'UK'}</span>
-                  </h3>
-                  <p className="font-body text-sm text-mist-900 mt-1 max-w-2xl">
-                    High-accuracy GPS verification shows the highest geographic density of registered architects, BIM directors, and university students ({geoInsights.topCandidate?.percentage}% of all verified users).
-                  </p>
-                </div>
-              </div>
+        {/* Quota & Remaining Slots Manager Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Sliders size={16} className="text-emerald-400" />
+            <h3 className="font-semibold text-sm text-white">
+              Campaign Quota & Remaining Slots Control
+            </h3>
+          </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {quotaFeedback && (
+            <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5 text-xs text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 size={14} className="shrink-0" />
+              <span>{quotaFeedback}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+            {/* Control 1: Set Remaining Free Slots Live */}
+            <form onSubmit={handleUpdateSlots} className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex flex-col justify-between">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Remaining Free Slots (Live Count)
+                </label>
+                <p className="text-[11px] text-slate-500 mb-3">
+                  Directly adjust the remaining passes displayed on the landing page.
+                </p>
+                <input
+                  type="number"
+                  min="0"
+                  value={customSlotsInput}
+                  onChange={(e) => setCustomSlotsInput(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 mb-3 font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={handleExportCSV}
-                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-ink-800 hover:bg-ink-700 text-white font-mono text-xs flex items-center justify-center gap-2 border border-white/10 transition-colors"
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors cursor-pointer"
                 >
-                  <Download size={14} />
-                  <span>Export Geo CSV</span>
+                  Update Slots Live
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetSlotsAuto}
+                  title="Auto: Quota - Registered Users"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-3 rounded-md border border-slate-700 transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  Auto Reset
+                </button>
+              </div>
+            </form>
+
+            {/* Control 2: Total Campaign Quota */}
+            <form onSubmit={handleSaveTotalQuota} className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex flex-col justify-between">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Campaign Total Quota
+                </label>
+                <p className="text-[11px] text-slate-500 mb-3">
+                  Maximum free pioneer passes allowed for the campaign.
+                </p>
+                <input
+                  type="number"
+                  min="1"
+                  value={customQuotaInput}
+                  onChange={(e) => setCustomQuotaInput(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 mb-3 font-mono"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2 px-3 rounded-md border border-slate-700 transition-colors cursor-pointer"
+              >
+                Save Total Quota
+              </button>
+            </form>
+
+            {/* Control 3: Quick Utilities */}
+            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex flex-col justify-between">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Database & Export Tools
+                </label>
+                <p className="text-[11px] text-slate-500 mb-3">
+                  Download registered user datasets or reset mock records.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportCSV}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-3 rounded-md border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Download size={13} />
+                    <span>Export CSV</span>
+                  </button>
+                  <button
+                    onClick={handleExportJSON}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 px-3 rounded-md border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Download size={13} />
+                    <span>Export JSON</span>
+                  </button>
+                </div>
+                <button
+                  onClick={handleResetData}
+                  className="w-full bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/40 text-xs py-2 px-3 rounded-md transition-colors cursor-pointer"
+                >
+                  Reset Demo Data
                 </button>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Geographic Radar Map & Density Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
-              {/* Left: Interactive Coordinate Radar Plot */}
-              <div className="lg:col-span-7 bg-ink-900/80 border border-white/10 rounded-3xl p-6 backdrop-blur-md flex flex-col">
-                <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-4">
-                  <div className="flex items-center gap-2">
-                    <Radio size={16} className="text-signal animate-pulse" />
-                    <h4 className="font-display text-lg font-bold text-white">
-                      Global User Coordinates Radar
-                    </h4>
-                  </div>
-                  <span className="font-mono text-xs text-mist-700">
-                    High-Accuracy GPS (±4.5m avg)
-                  </span>
-                </div>
-
-                {/* Simulated World Geographic Coordinate Map */}
-                <div className="relative flex-1 min-h-[340px] bg-ink-950 rounded-2xl border border-white/10 p-4 flex items-center justify-center overflow-hidden">
-                  <svg viewBox="0 0 800 400" className="w-full h-full opacity-90">
-                    <defs>
-                      <pattern id="radarGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="0.5" />
-                      </pattern>
-                      <radialGradient id="radarSweep" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor="#e8ff47" stopOpacity="0.15" />
-                        <stop offset="100%" stopColor="#e8ff47" stopOpacity="0" />
-                      </radialGradient>
-                    </defs>
-
-                    {/* Grid */}
-                    <rect width="800" height="400" fill="url(#radarGrid)" />
-
-                    {/* Equator & Meridian */}
-                    <line x1="0" y1="200" x2="800" y2="200" stroke="rgba(255,255,255,0.1)" strokeDasharray="5 5" />
-                    <line x1="400" y1="0" x2="400" y2="400" stroke="rgba(255,255,255,0.1)" strokeDasharray="5 5" />
-
-                    {/* Plot User Dots according to coordinates */}
-                    {users.map((u, i) => {
-                      // Project Lat/Lng to 800x400 SVG space (Equirectangular approximation)
-                      const cx = ((u.location.longitude + 180) / 360) * 800;
-                      const cy = ((90 - u.location.latitude) / 180) * 400;
-                      const isTopCity = geoInsights.topCandidate && u.location.city === geoInsights.topCandidate.city;
-
-                      return (
-                        <g key={u.id || i} className="group cursor-pointer">
-                          {/* Pulsing ring for top cluster */}
-                          {isTopCity && (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r="16"
-                              fill="none"
-                              stroke="#e8ff47"
-                              strokeWidth="1"
-                              opacity="0.4"
-                              className="animate-ping"
-                            />
-                          )}
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r={isTopCity ? 5 : 3.5}
-                            fill={isTopCity ? '#e8ff47' : '#ff6b35'}
-                            stroke="#ffffff"
-                            strokeWidth="1"
-                          />
-                        </g>
-                      );
-                    })}
-
-                    {/* City Cluster Labels on map */}
-                    {geoInsights.rankedCities.slice(0, 5).map((city, idx) => {
-                      const cx = ((city.coordinates[1] + 180) / 360) * 800;
-                      const cy = ((90 - city.coordinates[0]) / 180) * 400;
-
-                      return (
-                        <g key={city.city}>
-                          <text
-                            x={cx}
-                            y={cy - 12}
-                            fill={idx === 0 ? '#e8ff47' : '#ffffff'}
-                            fontSize="10"
-                            fontFamily="monospace"
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            {city.city} ({city.count})
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-
-                  {/* Radar Legend */}
-                  <div className="absolute bottom-3 left-3 bg-ink-900/90 border border-white/10 rounded-lg p-2.5 text-[10px] font-mono flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-signal" />
-                      <span>#1 Cluster ({geoInsights.topCandidate?.city})</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-ember" />
-                      <span>Global Nodes</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between text-xs font-mono text-mist-900">
-                  <span>Plotted directly from user device GPS signals</span>
-                  <span className="text-signal">OpenStreetMap Reverse Geocoded</span>
+        {/* TAB 1: USERS DIRECTORY */}
+        {activeTab === 'users' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+            {/* Search and Filters Header */}
+            <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3 w-full md:w-auto flex-1 max-w-lg">
+                <div className="relative w-full">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name, email, referral code, city..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-md pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
                 </div>
               </div>
 
-              {/* Right: Ranked Geographic Hubs Table */}
-              <div className="lg:col-span-5 bg-ink-900/80 border border-white/10 rounded-3xl p-6 backdrop-blur-md flex flex-col">
-                <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-4">
-                  <h4 className="font-display text-lg font-bold text-white">
-                    Metropolitan Density Ranking
-                  </h4>
-                  <span className="font-mono text-xs text-signal font-semibold">
-                    {geoInsights.rankedCities.length} Metros Identified
-                  </span>
-                </div>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <select
+                  value={professionFilter}
+                  onChange={(e) => setProfessionFilter(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-md px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="all">All Professions</option>
+                  <option value="Student">Architecture Students</option>
+                  <option value="Architect">Architects / Licensed</option>
+                  <option value="BIM">BIM Managers & Coordinators</option>
+                  <option value="CAD">CAD Drafters & Technicians</option>
+                  <option value="Engineer">Engineers (Structural/MEP)</option>
+                  <option value="Principal">Studio Principals</option>
+                </select>
 
-                <div className="flex-1 overflow-y-auto space-y-3">
-                  {geoInsights.rankedCities.map((item, idx) => (
-                    <div
-                      key={item.city}
-                      className={`p-4 rounded-2xl border transition-all ${
-                        idx === 0
-                          ? 'bg-signal/10 border-signal/40'
-                          : 'bg-ink-950/60 border-white/5 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-5 h-5 rounded-full flex items-center justify-center font-mono text-[10px] font-bold ${
-                            idx === 0 ? 'bg-signal text-ink-950' : 'bg-ink-800 text-mist-700'
-                          }`}>
-                            {idx + 1}
-                          </span>
-                          <span className="font-display font-bold text-white text-base">
-                            {item.city}, {item.country}
-                          </span>
-                        </div>
-                        <span className={`font-mono text-xs font-bold ${idx === 0 ? 'text-signal' : 'text-mist-700'}`}>
-                          {item.count} Users ({item.percentage}%)
-                        </span>
-                      </div>
-
-                      <div className="w-full bg-ink-950 h-1.5 rounded-full overflow-hidden mt-2">
-                        <div
-                          className={`h-full rounded-full ${idx === 0 ? 'bg-signal' : 'bg-mist-700'}`}
-                          style={{ width: `${item.percentage}%` }}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5 text-[11px] font-mono text-mist-900">
-                        <span>Avg GPS Precision: &plusmn;{item.avgAccuracy}m</span>
-                        {idx === 0 && (
-                          <span className="text-signal font-bold uppercase">
-                            Primary Recommendation
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
+                <span className="text-xs text-slate-400 font-mono whitespace-nowrap">
+                  Showing {filteredUsers.length} of {users.length}
+                </span>
               </div>
-
             </div>
 
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4">User ID</th>
+                    <th className="py-3 px-4">Full Name</th>
+                    <th className="py-3 px-4">Email Address</th>
+                    <th className="py-3 px-4">Age</th>
+                    <th className="py-3 px-4">Profession</th>
+                    <th className="py-3 px-4">Referral Code</th>
+                    <th className="py-3 px-4">Location (City, Country)</th>
+                    <th className="py-3 px-4">GPS Coordinates</th>
+                    <th className="py-3 px-4">Date Registered</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" className="py-8 text-center text-slate-500">
+                        No registered users found matching your filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-mono font-semibold text-emerald-400">
+                          {u.id}
+                        </td>
+                        <td className="py-3 px-4 font-medium text-white whitespace-nowrap">
+                          {u.name}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300 font-mono">
+                          {u.email}
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 font-mono">
+                          {u.age}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300">
+                          {u.profession}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-medium text-slate-200">
+                          {u.referralCode}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300">
+                          <span className="font-semibold text-white">{u.location.city}</span>, {u.location.country}
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                          {u.location.latitude.toFixed(2)}°, {u.location.longitude.toFixed(2)}° (±{u.location.accuracy}m)
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                          {new Date(u.registeredAt).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {/* TAB 2: Referral Code Manager */}
+        {/* TAB 2: REFERRAL CODES MANAGER */}
         {activeTab === 'referrals' && (
           <div className="space-y-6">
-            
-            {/* Header with actions */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-ink-900/80 border border-white/10 rounded-2xl p-6">
-              <div>
-                <h3 className="font-display text-2xl font-bold text-white">
-                  Referral Codes Management
-                </h3>
-                <p className="font-body text-xs sm:text-sm text-mist-900 mt-1">
-                  Manage mandatory invite codes. Users must hold a valid code to claim one of the first 1,000 free lifetime accounts.
-                </p>
-              </div>
+            {/* Generator & Copy All Bar */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                {/* Generator Form */}
+                <form onSubmit={handleGenerateCodes} className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400 font-medium">Generate</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={genCount}
+                      onChange={(e) => setGenCount(e.target.value)}
+                      className="w-16 bg-slate-950 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-white font-mono text-center"
+                    />
+                    <label className="text-xs text-slate-400 font-medium">Codes with Prefix</label>
+                    <input
+                      type="text"
+                      value={genPrefix}
+                      onChange={(e) => setGenPrefix(e.target.value.toUpperCase())}
+                      className="w-24 bg-slate-950 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-white font-mono uppercase"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>Create Codes</span>
+                  </button>
+                </form>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleCopyAllAvailable}
-                  className="px-4 py-2.5 rounded-xl bg-ink-800 hover:bg-ink-700 text-white font-mono text-xs flex items-center gap-2 border border-white/10 transition-colors"
-                >
-                  {copiedAll ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                  <span>{copiedAll ? 'All Codes Copied!' : 'Copy All Available Codes'}</span>
-                </button>
-
-                <button
-                  onClick={() => setShowGenModal(true)}
-                  className="px-5 py-2.5 rounded-xl bg-signal text-ink-950 font-display font-semibold text-xs flex items-center gap-2 hover:bg-signal-dim transition-all shadow-md shadow-signal/20"
-                >
-                  <Plus size={16} />
-                  <span>Generate New Codes</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Stats banner */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-ink-950 p-4 rounded-xl border border-white/5 font-mono text-xs">
-                <span className="text-mist-900 block">Total Codes in Database:</span>
-                <span className="text-xl font-bold text-white">{codes.length}</span>
-              </div>
-              <div className="bg-ink-950 p-4 rounded-xl border border-white/5 font-mono text-xs">
-                <span className="text-mist-900 block">Available (Unredeemed):</span>
-                <span className="text-xl font-bold text-signal">{availableCodes.length}</span>
-              </div>
-              <div className="bg-ink-950 p-4 rounded-xl border border-white/5 font-mono text-xs">
-                <span className="text-mist-900 block">Redeemed / Claimed:</span>
-                <span className="text-xl font-bold text-ember">{redeemedCodes.length}</span>
+                {/* Bulk Copy Button */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleCopyAllAvailable}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-4 py-2 rounded-md border border-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    {copiedAll ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                    <span>{copiedAll ? 'All Available Codes Copied!' : `Copy All Available (${availableCodes.length})`}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Referral Codes Table */}
-            <div className="bg-ink-900/80 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-md">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h4 className="font-semibold text-sm text-white">
+                  Referral Codes Pool
+                </h4>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-emerald-400 font-mono">
+                    ● {availableCodes.length} Available
+                  </span>
+                  <span className="text-slate-500 font-mono">
+                    ● {redeemedCodes.length} Redeemed
+                  </span>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
-                <table className="w-full text-left font-mono text-xs">
-                  <thead className="bg-ink-950 border-b border-white/10 text-mist-900 uppercase tracking-wider text-[11px]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
                     <tr>
-                      <th className="px-6 py-4">Referral Code</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4">Created Date</th>
-                      <th className="px-6 py-4">Redeemed By</th>
-                      <th className="px-6 py-4 text-right">Actions</th>
+                      <th className="py-3 px-4">Referral Code</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Used By / Account</th>
+                      <th className="py-3 px-4">Created Date</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {codes.map((item) => {
-                      const isAvailable = item.status === 'available';
-                      const isCopied = copiedCode === item.code;
-
-                      return (
-                        <tr key={item.code} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="px-6 py-4">
-                            <span className="font-bold text-white tracking-wider text-sm">
-                              {item.code}
+                  <tbody className="divide-y divide-slate-800">
+                    {codes.map((c) => (
+                      <tr key={c.code} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-white text-sm">
+                          {c.code}
+                        </td>
+                        <td className="py-3 px-4">
+                          {c.status === 'available' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                              Available
                             </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-semibold ${
-                              isAvailable
-                                ? 'bg-signal/15 text-signal border border-signal/30'
-                                : 'bg-ember/15 text-ember border border-ember/30'
-                            }`}>
-                              {item.status}
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                              Redeemed
                             </span>
-                          </td>
-                          <td className="px-6 py-4 text-mist-700">
-                            {item.createdAt}
-                          </td>
-                          <td className="px-6 py-4 text-mist-700">
-                            {item.redeemedBy ? (
-                              <span className="text-emerald-400 font-normal">
-                                {item.redeemedBy}
-                              </span>
-                            ) : (
-                              <span className="text-mist-900 italic">None yet</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleCopySingleCode(item.code)}
-                                title="Copy referral code to clipboard"
-                                className={`px-3 py-1.5 rounded-lg border text-xs flex items-center gap-1.5 transition-colors ${
-                                  isCopied
-                                    ? 'bg-green-500/20 border-green-500/40 text-green-400'
-                                    : 'bg-ink-800 hover:bg-ink-700 border-white/10 text-mist-100'
-                                }`}
-                              >
-                                {isCopied ? <Check size={13} /> : <Copy size={13} />}
-                                <span>{isCopied ? 'Copied' : 'Copy'}</span>
-                              </button>
-
-                              <button
-                                onClick={() => handleDeleteCode(item.code)}
-                                title="Revoke code"
-                                className="p-1.5 rounded-lg text-mist-900 hover:text-red-400 hover:bg-white/5 transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-300">
+                          {c.redeemedBy || '—'}
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 font-mono">
+                          {c.createdAt || '2026-09-20'}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              onClick={() => handleCopySingleCode(c.code)}
+                              title="Copy code"
+                              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                            >
+                              {copiedCode === c.code ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCode(c.code)}
+                              title="Delete code"
+                              className="p-1.5 rounded bg-slate-800 hover:bg-red-900/40 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
-
           </div>
         )}
 
-        {/* TAB 3: Registered Users Directory */}
-        {activeTab === 'users' && (
+        {/* TAB 3: 2ND OFFICE GEOGRAPHIC ANALYSIS */}
+        {activeTab === 'geo' && (
           <div className="space-y-6">
-            
-            {/* Table Control Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-ink-900/80 border border-white/10 rounded-2xl p-6">
-              <div>
-                <h3 className="font-display text-2xl font-bold text-white">
-                  Registered Innovators Directory
-                </h3>
-                <p className="font-body text-xs sm:text-sm text-mist-900 mt-1">
-                  Full list of {users.length} architects and students with verified high-accuracy GPS coordinates.
-                </p>
+            {/* Top Candidate Recommendation Banner */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Globe size={24} />
+                </div>
+                <div>
+                  <span className="text-xs font-mono font-semibold text-emerald-400 uppercase tracking-wider block mb-1">
+                    Expansion Recommendation
+                  </span>
+                  <h3 className="text-2xl font-bold text-white">
+                    Deploy 2nd Physical Office in: <span className="text-emerald-400">{geoInsights.topCandidate?.city || 'London'}, {geoInsights.topCandidate?.country || 'UK'}</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                    Geographic density analysis indicates that {geoInsights.topCandidate?.percentage}% of all verified early registrations originate from this metropolitan region ({geoInsights.topCandidate?.count} verified users).
+                  </p>
+                </div>
               </div>
 
-              {/* Export actions */}
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleExportCSV}
-                  className="px-4 py-2.5 rounded-xl bg-ink-800 hover:bg-ink-700 text-white font-mono text-xs flex items-center gap-2 border border-white/10 transition-colors"
-                >
-                  <Download size={14} />
-                  <span>Export CSV</span>
-                </button>
-
-                <button
-                  onClick={handleExportJSON}
-                  className="px-4 py-2.5 rounded-xl bg-ink-800 hover:bg-ink-700 text-white font-mono text-xs flex items-center gap-2 border border-white/10 transition-colors"
-                >
-                  <Download size={14} />
-                  <span>Export JSON</span>
-                </button>
-
-                <button
-                  onClick={handleResetData}
-                  title="Reset to pre-seeded demo users"
-                  className="p-2.5 rounded-xl text-mist-900 hover:text-white hover:bg-white/5 transition-colors"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
+              <button
+                onClick={handleExportCSV}
+                className="px-4 py-2.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 flex items-center gap-2 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                <Download size={14} />
+                <span>Export Geo Dataset</span>
+              </button>
             </div>
 
-            {/* Search & Profession Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-              <div className="sm:col-span-8 relative">
-                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-mist-900" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by name, email, referral code, or city..."
-                  className="w-full bg-ink-950 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white text-xs font-mono focus:outline-none focus:border-signal"
-                />
+            {/* Ranked Metropolitan Locations Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+              <div className="p-4 border-b border-slate-800">
+                <h4 className="font-semibold text-sm text-white">
+                  Metropolitan Distribution & Geography Rankings
+                </h4>
               </div>
 
-              <div className="sm:col-span-4">
-                <select
-                  value={professionFilter}
-                  onChange={(e) => setProfessionFilter(e.target.value)}
-                  className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-xs font-mono focus:outline-none focus:border-signal cursor-pointer"
-                >
-                  <option value="all">All Professions ({users.length})</option>
-                  <option value="architect">Architects</option>
-                  <option value="student">Architecture Students</option>
-                  <option value="bim">BIM Managers</option>
-                  <option value="engineer">Structural / MEP Engineers</option>
-                  <option value="designer">Computational Designers</option>
-                  <option value="drafter">CAD Drafters</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Users Table */}
-            <div className="bg-ink-900/80 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-md">
               <div className="overflow-x-auto">
-                <table className="w-full text-left font-mono text-xs">
-                  <thead className="bg-ink-950 border-b border-white/10 text-mist-900 uppercase tracking-wider text-[11px]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
                     <tr>
-                      <th className="px-6 py-4">User</th>
-                      <th className="px-6 py-4">Age</th>
-                      <th className="px-6 py-4">Profession</th>
-                      <th className="px-6 py-4">Referral Code</th>
-                      <th className="px-6 py-4">Verified Location</th>
-                      <th className="px-6 py-4">GPS Accuracy</th>
-                      <th className="px-6 py-4">Registered</th>
+                      <th className="py-3 px-4">Rank</th>
+                      <th className="py-3 px-4">City / Metropolitan Area</th>
+                      <th className="py-3 px-4">Country</th>
+                      <th className="py-3 px-4">Registered Users</th>
+                      <th className="py-3 px-4">Percentage Share</th>
+                      <th className="py-3 px-4">Avg GPS Accuracy</th>
+                      <th className="py-3 px-4">Office Deployment Priority</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {filteredUsers.length > 0 ? (
-                      filteredUsers.map((u) => (
-                        <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-white text-sm">
-                              {u.name}
-                            </div>
-                            <div className="text-[11px] text-mist-900">
-                              {u.email}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-mist-700">
-                            {u.age}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-2.5 py-1 rounded-md bg-ink-800 border border-white/10 text-signal text-[11px]">
-                              {u.profession}
+                  <tbody className="divide-y divide-slate-800">
+                    {geoInsights.rankedCities.map((item, index) => (
+                      <tr key={item.city} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-400">
+                          #{index + 1}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-white">
+                          {item.city}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300">
+                          {item.country}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-400">
+                          {item.count} users
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-300">
+                          {item.percentage}%
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-400">
+                          ±{item.avgAccuracy}m
+                        </td>
+                        <td className="py-3 px-4">
+                          {index === 0 ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              ★ Top Recommendation (Office #2)
                             </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="font-bold text-white bg-ink-950 px-2 py-1 rounded border border-white/10">
-                              {u.referralCode}
+                          ) : index < 3 ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300">
+                              Secondary Candidate
                             </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-white font-medium flex items-center gap-1.5">
-                              <MapPin size={13} className="text-signal" />
-                              <span>{u.location.city}, {u.location.country}</span>
-                            </div>
-                            <div className="text-[10px] text-mist-900 mt-0.5">
-                              {u.location.latitude.toFixed(4)}°, {u.location.longitude.toFixed(4)}°
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-2 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              &plusmn;{u.location.accuracy}m
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium text-slate-500">
+                              Monitoring Growth
                             </span>
-                          </td>
-                          <td className="px-6 py-4 text-mist-900 text-[11px]">
-                            {new Date(u.registeredAt).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-mist-900 font-mono text-sm">
-                          No users found matching query.
+                          )}
                         </td>
                       </tr>
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
-
           </div>
         )}
 
       </div>
-
-      {/* Code Generation Sub-Modal */}
-      {showGenModal && (
-        <div className="fixed inset-0 z-[130] bg-ink-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-ink-900 border border-white/15 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl">
-            <h4 className="font-display text-xl font-bold text-white mb-2">
-              Batch Generate Referral Codes
-            </h4>
-            <p className="font-body text-xs text-mist-900 mb-6">
-              Create unique referral codes to distribute to architectural firms, universities, or social channels.
-            </p>
-
-            <form onSubmit={handleGenerateCodes} className="space-y-4">
-              <div>
-                <label className="block font-mono text-xs text-mist-700 mb-1.5">
-                  Number of Codes to Generate
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={genCount}
-                  onChange={(e) => setGenCount(e.target.value)}
-                  className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-signal"
-                />
-              </div>
-
-              <div>
-                <label className="block font-mono text-xs text-mist-700 mb-1.5">
-                  Prefix (e.g. ARCH, BIM, CAD, STUDIO)
-                </label>
-                <input
-                  type="text"
-                  maxLength="8"
-                  value={genPrefix}
-                  onChange={(e) => setGenPrefix(e.target.value.toUpperCase())}
-                  className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-signal uppercase"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowGenModal(false)}
-                  className="px-4 py-2.5 rounded-xl text-mist-700 hover:text-white font-mono text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-signal text-ink-950 font-display font-semibold text-xs hover:bg-signal-dim transition-all shadow-md shadow-signal/20"
-                >
-                  Generate Codes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

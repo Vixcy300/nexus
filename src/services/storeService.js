@@ -508,11 +508,11 @@ export const checkAdminAuth = () => {
 
 export const loginAdmin = (usernameOrEmail, password) => {
   const userClean = (usernameOrEmail || '').trim().toLowerCase();
-  if ((userClean === 'admin@archnexus.ai' || userClean === 'admin') && password === 'nexus2026') {
+  if (userClean === 'metheadminlover@gmail.com' && password === 'bharanihema@2007') {
     localStorage.setItem(STORAGE_KEYS.ADMIN_AUTH, 'authenticated_true');
     return { success: true };
   }
-  return { success: false, message: 'Invalid administrator credentials. Try admin@archnexus.ai / nexus2026' };
+  return { success: false, message: 'Invalid administrator email or password.' };
 };
 
 export const logoutAdmin = () => {

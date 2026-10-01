@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, Shield, KeyRound, AlertCircle, ArrowRight } from 'lucide-react';
+import { X, Shield, KeyRound, AlertCircle } from 'lucide-react';
 import { loginAdmin } from '../../services/storeService';
 
 export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }) {
-  const [username, setUsername] = useState('admin@archnexus.ai');
-  const [password, setPassword] = useState('nexus2026');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -62,10 +62,10 @@ export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }) {
               </div>
               <div>
                 <span className="font-mono text-[10px] text-signal uppercase tracking-wider block">
-                  Secure Access
+                  Restricted Access
                 </span>
                 <h3 className="font-display text-xl font-bold text-white">
-                  Administrator Portal
+                  Administrator Login
                 </h3>
               </div>
             </div>
@@ -88,13 +88,14 @@ export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }) {
 
             <div>
               <label className="block font-mono text-xs text-mist-700 mb-1.5">
-                Admin Username / Email
+                Admin Email Address
               </label>
               <input
-                type="text"
+                type="email"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter admin email"
                 className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-signal"
               />
             </div>
@@ -108,14 +109,9 @@ export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
                 className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-signal"
               />
-            </div>
-
-            <div className="bg-ink-950 border border-white/5 rounded-xl p-3 text-[11px] font-mono text-mist-700">
-              <span className="text-signal font-semibold">Demo Credentials:</span>
-              <div>Username: <code className="text-white">admin@archnexus.ai</code></div>
-              <div>Password: <code className="text-white">nexus2026</code></div>
             </div>
 
             <button
@@ -124,7 +120,7 @@ export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }) {
               className="w-full bg-signal text-ink-950 font-display font-semibold py-3 rounded-xl hover:bg-signal-dim transition-all flex items-center justify-center gap-2 mt-4 cursor-pointer"
             >
               <KeyRound size={16} />
-              <span>{loading ? 'Authenticating...' : 'Sign In to Admin Hub'}</span>
+              <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
             </button>
           </form>
         </motion.div>

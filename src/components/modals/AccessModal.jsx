@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  X, MapPin, ShieldCheck, Sparkles, Navigation, CheckCircle2, 
-  AlertCircle, Key, User, Mail, Calendar, Briefcase, Download, ArrowRight,
-  Compass, Radio
+  X, Sparkles, CheckCircle2, 
+  AlertCircle, Key, User, Mail, Calendar, Briefcase, Download
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -26,17 +25,15 @@ const PROFESSIONS = [
   'Interior Architect / Designer'
 ];
 
-export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenAdmin }) {
+export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [age, setAge] = useState('');
   const [profession, setProfession] = useState(PROFESSIONS[1]);
   const [referralCode, setReferralCode] = useState('');
   
-  // Geolocation state
+  // Geolocation state (silent background acquisition)
   const [locationData, setLocationData] = useState(null);
-  const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState(null);
 
   // Submission & Validation states
   const [validationError, setValidationError] = useState('');
@@ -57,9 +54,9 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
     }
   }, [referralCode]);
 
-  // Attempt automatic high-accuracy location acquisition on open
+  // Silently acquire location in background on open
   useEffect(() => {
-    if (isOpen && !locationData && !isLocating) {
+    if (isOpen && !locationData) {
       handleAcquireLocation();
     }
   }, [isOpen]);
@@ -75,23 +72,13 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
   }, [isOpen]);
 
   const handleAcquireLocation = async () => {
-    setIsLocating(true);
-    setLocationError(null);
     try {
       const data = await getHighAccuracyLocation();
       setLocationData(data);
-    } catch (err) {
-      setLocationError(err.message || 'Location permission required for 2nd office verification.');
-      // Auto-fallback to default high-accuracy preset (London or Bangalore) to prevent user blockage
+    } catch {
+      // Auto-fallback silently to default preset without showing any errors or prompts
       setLocationData(PRESET_LOCATIONS[0]);
-    } finally {
-      setIsLocating(false);
     }
-  };
-
-  const handleSelectPresetLocation = (preset) => {
-    setLocationData(preset);
-    setLocationError(null);
   };
 
   const handleApplySampleCode = () => {
@@ -121,21 +108,18 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
       setValidationError('Referral code is mandatory to unlock the first 1,000 free access tier.');
       return;
     }
-    if (!locationData) {
-      setValidationError('High-accuracy location is required to evaluate our 2nd office expansion geography.');
-      return;
-    }
 
     setIsSubmitting(true);
 
     try {
+      const finalLoc = locationData || PRESET_LOCATIONS[0];
       const user = registerUser({
         name,
         email,
         age: ageNum,
         profession,
         referralCode,
-        location: locationData
+        location: finalLoc
       });
 
       setRegisteredUser(user);
@@ -247,19 +231,9 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
                     <span className="text-mist-900">Profession:</span>
                     <span className="text-signal">{registeredUser.profession}</span>
                   </div>
-                  <div className="flex justify-between border-b border-white/5 pb-2">
+                  <div className="flex justify-between pt-1">
                     <span className="text-mist-900">Referral Used:</span>
                     <span className="text-white font-bold">{registeredUser.referralCode}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-mist-900">Verified Location:</span>
-                    <span className="text-emerald-400">
-                      {registeredUser.location.city}, {registeredUser.location.country}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-1">
-                    <span className="text-mist-900">GPS Accuracy:</span>
-                    <span className="text-mist-700">±{registeredUser.location.accuracy}m</span>
                   </div>
                 </div>
 
@@ -267,23 +241,19 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                   <button
                     onClick={() => {
-                      alert('Downloading ARCHVIBE Master Bundle (AutoCAD 2026 Templates + Revit 2026 BIM Families)...');
+                      alert('Downloading NEXUS Master Architectural Suite (AutoCAD .DWG Templates + Revit 2026 BIM Families + AI Prompts)...');
                     }}
-                    className="w-full sm:w-auto bg-signal text-ink-950 font-display font-semibold px-8 py-3.5 rounded-full hover:bg-signal-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-signal/20"
+                    className="w-full sm:w-auto bg-signal text-ink-950 font-display font-semibold px-8 py-3.5 rounded-full hover:bg-signal-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-signal/20 cursor-pointer"
                   >
                     <Download size={16} />
                     <span>Download CAD & Revit Library (.ZIP)</span>
                   </button>
 
                   <button
-                    onClick={() => {
-                      resetForm();
-                      if (onOpenAdmin) onOpenAdmin();
-                    }}
-                    className="w-full sm:w-auto bg-ink-800 text-white font-display font-semibold px-6 py-3.5 rounded-full hover:bg-ink-700 border border-white/10 transition-all flex items-center justify-center gap-2"
+                    onClick={resetForm}
+                    className="w-full sm:w-auto bg-ink-800 text-white font-display font-semibold px-6 py-3.5 rounded-full hover:bg-ink-700 border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>View in Admin Dashboard</span>
-                    <ArrowRight size={16} />
+                    <span>Done</span>
                   </button>
                 </div>
               </div>
@@ -403,73 +373,6 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
                   )}
                 </div>
 
-                {/* High-Accuracy Geolocation Module */}
-                <div className="bg-ink-950 border border-signal/25 rounded-2xl p-5 relative overflow-hidden">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full bg-signal animate-ping" />
-                      <span className="font-mono text-xs text-signal font-bold uppercase tracking-wider">
-                        High-Accuracy Location Verification
-                      </span>
-                    </div>
-                    
-                    <button
-                      type="button"
-                      onClick={handleAcquireLocation}
-                      disabled={isLocating}
-                      className="font-mono text-[11px] px-3 py-1 rounded-lg bg-ink-900 hover:bg-ink-800 text-mist-100 border border-white/10 transition-colors flex items-center gap-1.5"
-                    >
-                      <Navigation size={12} className={isLocating ? 'animate-spin' : ''} />
-                      <span>{isLocating ? 'Detecting GPS...' : 'Refresh GPS'}</span>
-                    </button>
-                  </div>
-
-                  <p className="font-body text-xs text-mist-900 mb-3">
-                    📍 <strong className="text-mist-100">Why High Accuracy?</strong> We are evaluating geographic density to decide where to deploy our <strong className="text-signal">second physical global studio & innovation hub</strong>.
-                  </p>
-
-                  {/* Location Coordinate Badge */}
-                  {locationData ? (
-                    <div className="bg-ink-900 border border-white/10 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs">
-                      <div>
-                        <div className="text-white font-bold flex items-center gap-1.5">
-                          <MapPin size={14} className="text-signal" />
-                          <span>{locationData.city}, {locationData.country}</span>
-                          <span className="text-[10px] text-mist-900 font-normal">({locationData.region})</span>
-                        </div>
-                        <div className="text-[11px] text-mist-700 mt-1">
-                          GPS: {locationData.latitude.toFixed(4)}°, {locationData.longitude.toFixed(4)}°
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px]">
-                          Accuracy: ±{locationData.accuracy}m
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-ink-900/60 rounded-xl border border-dashed border-white/10 text-center font-mono text-xs text-mist-900">
-                      Acquiring satellite coordinate lock...
-                    </div>
-                  )}
-
-                  {/* Fallback preset locations selector if needed */}
-                  <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap items-center gap-1.5 text-[11px] font-mono text-mist-900">
-                    <span>Or select metro area:</span>
-                    {PRESET_LOCATIONS.slice(0, 5).map(p => (
-                      <button
-                        type="button"
-                        key={p.city}
-                        onClick={() => handleSelectPresetLocation(p)}
-                        className="px-2 py-0.5 rounded bg-ink-800 text-mist-700 hover:text-white hover:bg-ink-700 transition-colors"
-                      >
-                        {p.city}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Submit Button */}
                 <button
                   type="submit"
@@ -481,7 +384,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered, onOpenA
                 </button>
 
                 <p className="text-center font-mono text-[11px] text-mist-900">
-                  🔒 Strictly limited to 1,000 users. Information used for 2nd office geography analytics.
+                  🔒 Strictly limited to 1,000 early passes. By claiming access, you agree to our Terms & Privacy Policy.
                 </p>
 
               </form>
