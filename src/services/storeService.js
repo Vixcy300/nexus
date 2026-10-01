@@ -1,250 +1,29 @@
 // Store service for managing 1,000 Free Users Campaign, Referral Codes & Geolocation Analytics
 
 const STORAGE_KEYS = {
-  USERS: 'arch_nexus_users_v1',
-  CODES: 'arch_nexus_referral_codes_v1',
+  USERS: 'arch_nexus_users_v2',
+  CODES: 'arch_nexus_referral_codes_v2',
   ADMIN_AUTH: 'arch_nexus_admin_session_v1',
   QUOTA: 'arch_nexus_quota_v1'
 };
 
 export const TOTAL_FREE_QUOTA = 1000;
 
-// Pre-seeded high-accuracy realistic architectural professionals across global architectural hubs
-// to provide immediate, rich geographic intelligence for deploying the 2nd office!
-const INITIAL_USERS = [
-  {
-    id: 'USR-8901',
-    name: 'Julian Vance',
-    email: 'j.vance@fosterandpartners-alumni.com',
-    age: 32,
-    profession: 'Senior Architect',
-    referralCode: 'ARCH-LONDON-01',
-    location: {
-      latitude: 51.5074,
-      longitude: -0.1278,
-      accuracy: 4.8,
-      city: 'London',
-      region: 'Greater London',
-      country: 'United Kingdom'
-    },
-    registeredAt: '2026-09-24T10:14:00.000Z'
-  },
-  {
-    id: 'USR-8902',
-    name: 'Aarav Mehta',
-    email: 'aarav.bim@studioindus.in',
-    age: 27,
-    profession: 'BIM Manager',
-    referralCode: 'BIM-BLR-09',
-    location: {
-      latitude: 12.9716,
-      longitude: 77.5946,
-      accuracy: 3.2,
-      city: 'Bangalore',
-      region: 'Karnataka',
-      country: 'India'
-    },
-    registeredAt: '2026-09-24T11:42:00.000Z'
-  },
-  {
-    id: 'USR-8903',
-    name: 'Elena Rostova',
-    email: 'elena.rostova@berlin-architekten.de',
-    age: 29,
-    profession: 'Computational Designer',
-    referralCode: 'BERLIN-CAD-22',
-    location: {
-      latitude: 52.5200,
-      longitude: 13.4050,
-      accuracy: 5.1,
-      city: 'Berlin',
-      region: 'Berlin',
-      country: 'Germany'
-    },
-    registeredAt: '2026-09-25T08:20:00.000Z'
-  },
-  {
-    id: 'USR-8904',
-    name: 'Liam Chen',
-    email: 'liam.chen@singapore-urban.sg',
-    age: 24,
-    profession: 'Architecture Student',
-    referralCode: 'NUS-SG-44',
-    location: {
-      latitude: 1.3521,
-      longitude: 103.8198,
-      accuracy: 4.0,
-      city: 'Singapore',
-      region: 'Central',
-      country: 'Singapore'
-    },
-    registeredAt: '2026-09-25T14:15:00.000Z'
-  },
-  {
-    id: 'USR-8905',
-    name: 'Sarah Jenkins',
-    email: 'sjenkins@som-alumni.ny.us',
-    age: 38,
-    profession: 'Lead Structural Engineer',
-    referralCode: 'NYC-REVIT-88',
-    location: {
-      latitude: 40.7128,
-      longitude: -74.0060,
-      accuracy: 6.2,
-      city: 'New York',
-      region: 'New York',
-      country: 'United States'
-    },
-    registeredAt: '2026-09-26T09:30:00.000Z'
-  },
-  {
-    id: 'USR-8906',
-    name: 'Kenji Takahashi',
-    email: 'takahashi.k@tokyo-spatial.jp',
-    age: 34,
-    profession: 'Revit Family Specialist',
-    referralCode: 'TOKYO-BIM-07',
-    location: {
-      latitude: 35.6762,
-      longitude: 139.6503,
-      accuracy: 3.5,
-      city: 'Tokyo',
-      region: 'Kanto',
-      country: 'Japan'
-    },
-    registeredAt: '2026-09-26T16:04:00.000Z'
-  },
-  {
-    id: 'USR-8907',
-    name: 'Marcus Sterling',
-    email: 'marcus@sterling-designs.co.uk',
-    age: 41,
-    profession: 'Studio Principal / Founder',
-    referralCode: 'ARCH-LONDON-02',
-    location: {
-      latitude: 51.5142,
-      longitude: -0.0931,
-      accuracy: 5.5,
-      city: 'London',
-      region: 'Greater London',
-      country: 'United Kingdom'
-    },
-    registeredAt: '2026-09-27T10:11:00.000Z'
-  },
-  {
-    id: 'USR-8908',
-    name: 'Priya Sharma',
-    email: 'priya.cad@blr-tech.in',
-    age: 26,
-    profession: 'CAD Drafter / Technician',
-    referralCode: 'BIM-BLR-14',
-    location: {
-      latitude: 12.9352,
-      longitude: 77.6245,
-      accuracy: 2.8,
-      city: 'Bangalore',
-      region: 'Karnataka',
-      country: 'India'
-    },
-    registeredAt: '2026-09-27T12:55:00.000Z'
-  },
-  {
-    id: 'USR-8909',
-    name: 'Omar Al-Mansoor',
-    email: 'omar@gulf-towers.ae',
-    age: 36,
-    profession: 'Senior Architect',
-    referralCode: 'DXB-PARAM-33',
-    location: {
-      latitude: 25.2048,
-      longitude: 55.2708,
-      accuracy: 7.1,
-      city: 'Dubai',
-      region: 'Dubai',
-      country: 'United Arab Emirates'
-    },
-    registeredAt: '2026-09-28T07:44:00.000Z'
-  },
-  {
-    id: 'USR-8910',
-    name: 'Chloe Dubois',
-    email: 'c.dubois@ateliers-paris.fr',
-    age: 30,
-    profession: 'BIM Coordinator',
-    referralCode: 'PARIS-RVT-19',
-    location: {
-      latitude: 48.8566,
-      longitude: 2.3522,
-      accuracy: 4.4,
-      city: 'Paris',
-      region: 'Île-de-France',
-      country: 'France'
-    },
-    registeredAt: '2026-09-28T15:20:00.000Z'
-  },
-  {
-    id: 'USR-8911',
-    name: 'Rohan Deshmukh',
-    email: 'rohan.d@iitb-alumni.in',
-    age: 23,
-    profession: 'Architecture Student',
-    referralCode: 'BIM-BLR-21',
-    location: {
-      latitude: 12.9815,
-      longitude: 77.5921,
-      accuracy: 3.9,
-      city: 'Bangalore',
-      region: 'Karnataka',
-      country: 'India'
-    },
-    registeredAt: '2026-09-29T10:05:00.000Z'
-  },
-  {
-    id: 'USR-8912',
-    name: 'Charlotte Wright',
-    email: 'charlotte@shoreditch-arch.co.uk',
-    age: 28,
-    profession: 'Interior Architect',
-    referralCode: 'ARCH-LONDON-05',
-    location: {
-      latitude: 51.5260,
-      longitude: -0.0782,
-      accuracy: 4.1,
-      city: 'London',
-      region: 'Greater London',
-      country: 'United Kingdom'
-    },
-    registeredAt: '2026-09-29T17:30:00.000Z'
-  }
-];
+// NO fake users - starts completely clean for genuine user registrations
+const INITIAL_USERS = [];
 
-// Pre-seeded active referral codes for testing & demonstration
+// Clean initial active referral codes ready for real pioneers (no fake redeemed codes)
 const INITIAL_REFERRAL_CODES = [
-  // Active available codes ready to be redeemed
-  { code: 'ARCH-2026-ALPHA', status: 'available', createdAt: '2026-09-20', redeemedBy: null, tags: ['VIP', 'CAD'] },
-  { code: 'BIM-VIP-789', status: 'available', createdAt: '2026-09-20', redeemedBy: null, tags: ['Revit', 'VIP'] },
-  { code: 'CAD-PRO-452', status: 'available', createdAt: '2026-09-21', redeemedBy: null, tags: ['AutoCAD'] },
-  { code: 'NEXUS-AI-999', status: 'available', createdAt: '2026-09-22', redeemedBy: null, tags: ['AI Prompt'] },
-  { code: 'STUDIO-HUB-101', status: 'available', createdAt: '2026-09-22', redeemedBy: null, tags: ['Studio'] },
-  { code: 'OFFICE-EXP-2026', status: 'available', createdAt: '2026-09-23', redeemedBy: null, tags: ['Expansion'] },
-  { code: 'REVIT-DYN-555', status: 'available', createdAt: '2026-09-23', redeemedBy: null, tags: ['Dynamo'] },
-  { code: 'PARAM-GEN-300', status: 'available', createdAt: '2026-09-24', redeemedBy: null, tags: ['Parametric'] },
-  { code: 'GEO-LOC-777', status: 'available', createdAt: '2026-09-24', redeemedBy: null, tags: ['GeoTarget'] },
-  { code: 'GLOBAL-1000-FREE', status: 'available', createdAt: '2026-09-25', redeemedBy: null, tags: ['General'] },
-  
-  // Already redeemed codes corresponding to initial users
-  { code: 'ARCH-LONDON-01', status: 'redeemed', createdAt: '2026-09-20', redeemedBy: 'j.vance@fosterandpartners-alumni.com', redeemedAt: '2026-09-24T10:14:00.000Z' },
-  { code: 'BIM-BLR-09', status: 'redeemed', createdAt: '2026-09-20', redeemedBy: 'aarav.bim@studioindus.in', redeemedAt: '2026-09-24T11:42:00.000Z' },
-  { code: 'BERLIN-CAD-22', status: 'redeemed', createdAt: '2026-09-21', redeemedBy: 'elena.rostova@berlin-architekten.de', redeemedAt: '2026-09-25T08:20:00.000Z' },
-  { code: 'NUS-SG-44', status: 'redeemed', createdAt: '2026-09-21', redeemedBy: 'liam.chen@singapore-urban.sg', redeemedAt: '2026-09-25T14:15:00.000Z' },
-  { code: 'NYC-REVIT-88', status: 'redeemed', createdAt: '2026-09-22', redeemedBy: 'sjenkins@som-alumni.ny.us', redeemedAt: '2026-09-26T09:30:00.000Z' },
-  { code: 'TOKYO-BIM-07', status: 'redeemed', createdAt: '2026-09-22', redeemedBy: 'takahashi.k@tokyo-spatial.jp', redeemedAt: '2026-09-26T16:04:00.000Z' },
-  { code: 'ARCH-LONDON-02', status: 'redeemed', createdAt: '2026-09-23', redeemedBy: 'marcus@sterling-designs.co.uk', redeemedAt: '2026-09-27T10:11:00.000Z' },
-  { code: 'BIM-BLR-14', status: 'redeemed', createdAt: '2026-09-23', redeemedBy: 'priya.cad@blr-tech.in', redeemedAt: '2026-09-27T12:55:00.000Z' },
-  { code: 'DXB-PARAM-33', status: 'redeemed', createdAt: '2026-09-24', redeemedBy: 'omar@gulf-towers.ae', redeemedAt: '2026-09-28T07:44:00.000Z' },
-  { code: 'PARIS-RVT-19', status: 'redeemed', createdAt: '2026-09-24', redeemedBy: 'c.dubois@ateliers-paris.fr', redeemedAt: '2026-09-28T15:20:00.000Z' },
-  { code: 'BIM-BLR-21', status: 'redeemed', createdAt: '2026-09-25', redeemedBy: 'rohan.d@iitb-alumni.in', redeemedAt: '2026-09-29T10:05:00.000Z' },
-  { code: 'ARCH-LONDON-05', status: 'redeemed', createdAt: '2026-09-25', redeemedBy: 'charlotte@shoreditch-arch.co.uk', redeemedAt: '2026-09-29T17:30:00.000Z' }
+  { code: 'ARCH-2026-ALPHA', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['VIP', 'CAD'] },
+  { code: 'NEXUS-BIM-101', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Revit'] },
+  { code: 'NEXUS-CAD-202', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['AutoCAD'] },
+  { code: 'NEXUS-AI-303', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['AI Prompt'] },
+  { code: 'NEXUS-STUDIO-404', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Studio'] },
+  { code: 'NEXUS-GEO-505', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Expansion'] },
+  { code: 'REVIT-DYN-606', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Dynamo'] },
+  { code: 'PARAM-GEN-707', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Parametric'] },
+  { code: 'NEXUS-PIONEER-808', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Pioneer'] },
+  { code: 'GLOBAL-1000-FREE', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['General'] }
 ];
 
 export const getQuotaSettings = () => {
@@ -278,7 +57,7 @@ export const setRemainingSlotsCount = (newCount) => {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
   }
-  return getRemainingSlots();
+  return updated;
 };
 
 export const resetRemainingSlotsToAuto = () => {
@@ -291,7 +70,7 @@ export const resetRemainingSlotsToAuto = () => {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
   }
-  return getRemainingSlots();
+  return { ...updated, remainingSlots: getRemainingSlots() };
 };
 
 export const setTotalQuota = (newQuota) => {
@@ -305,105 +84,117 @@ export const setTotalQuota = (newQuota) => {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
   }
-  return getRemainingSlots();
+  return { ...updated, remainingSlots: getRemainingSlots() };
 };
 
 export const getStoredUsers = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-      return INITIAL_USERS;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Purge any old fake demo records
+        const genuineUsers = parsed.filter(u => !u.id?.startsWith('USR-89'));
+        if (genuineUsers.length !== parsed.length) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(genuineUsers));
+        }
+        return genuineUsers;
+      }
     }
-    return JSON.parse(raw);
-  } catch {
-    return INITIAL_USERS;
-  }
+  } catch {}
+  return INITIAL_USERS;
 };
 
 export const getStoredReferralCodes = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CODES);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(INITIAL_REFERRAL_CODES));
-      return INITIAL_REFERRAL_CODES;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
-    return JSON.parse(raw);
-  } catch {
-    return INITIAL_REFERRAL_CODES;
-  }
+  } catch {}
+  localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(INITIAL_REFERRAL_CODES));
+  return INITIAL_REFERRAL_CODES;
 };
 
-export const validateReferralCode = (inputCode) => {
-  if (!inputCode || typeof inputCode !== 'string') return { valid: false, message: 'Referral code is mandatory to unlock access.' };
-  
-  const cleanCode = inputCode.trim().toUpperCase();
+export const validateReferralCode = (code) => {
+  if (!code || typeof code !== 'string') {
+    return { valid: false, message: 'Referral code is required.' };
+  }
+
+  const clean = code.trim().toUpperCase();
   const codes = getStoredReferralCodes();
-  const match = codes.find(c => c.code.toUpperCase() === cleanCode);
+  const found = codes.find(c => c.code.toUpperCase() === clean);
 
-  if (!match) {
-    return { valid: false, message: 'Invalid referral code. Please check or request an official invite code.' };
+  if (!found) {
+    return { valid: false, message: 'Invalid referral code. Please check your invitation pass.' };
   }
 
-  if (match.status === 'redeemed') {
-    return { valid: false, message: `This referral code has already been redeemed.` };
+  if (found.status === 'redeemed') {
+    return { valid: false, message: 'This referral code has already been redeemed.' };
   }
 
-  return { valid: true, code: match.code, details: match };
+  return { valid: true, code: found.code, message: 'Valid code: 100% Free Lifetime Access Unlocked' };
 };
 
 export const registerUser = ({ name, email, age, profession, referralCode, location }) => {
   const users = getStoredUsers();
   const codes = getStoredReferralCodes();
-  
-  // Check if email already registered
-  const existingUser = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-  if (existingUser) {
-    throw new Error('This email address has already claimed free early access.');
+  const quota = getRemainingSlots();
+
+  if (quota <= 0) {
+    throw new Error('All 1,000 free lifetime pioneer slots have been claimed.');
+  }
+
+  // Check duplicate email
+  const existingEmail = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+  if (existingEmail) {
+    throw new Error('This email address has already claimed an access pass.');
   }
 
   // Validate referral code
-  const validation = validateReferralCode(referralCode);
-  if (!validation.valid) {
-    throw new Error(validation.message);
+  const codeValidation = validateReferralCode(referralCode);
+  if (!codeValidation.valid) {
+    throw new Error(codeValidation.message);
   }
 
-  const cleanCode = referralCode.trim().toUpperCase();
+  // Generate ID
+  const newId = `USR-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // Create new user record
   const newUser = {
-    id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
+    id: newId,
     name: name.trim(),
-    email: email.trim().toLowerCase(),
-    age: parseInt(age, 10) || 25,
-    profession: profession || 'Architect',
-    referralCode: cleanCode,
+    email: email.trim(),
+    age: parseInt(age, 10),
+    profession,
+    referralCode: referralCode.trim().toUpperCase(),
     location: {
-      latitude: location?.latitude || 51.5074,
-      longitude: location?.longitude || -0.1278,
-      accuracy: location?.accuracy ? Math.round(location.accuracy * 10) / 10 : 8.5,
-      city: location?.city || 'London',
-      region: location?.region || 'Greater London',
-      country: location?.country || 'United Kingdom'
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy || 5,
+      city: location.city || 'Undisclosed',
+      region: location.region || '',
+      country: location.country || 'Global'
     },
     registeredAt: new Date().toISOString()
   };
 
-  // Update codes
+  // Mark referral code as redeemed
   const updatedCodes = codes.map(c => {
-    if (c.code.toUpperCase() === cleanCode) {
+    if (c.code.toUpperCase() === referralCode.trim().toUpperCase()) {
       return {
         ...c,
         status: 'redeemed',
-        redeemedBy: newUser.email,
-        redeemedAt: newUser.registeredAt
+        redeemedBy: email.trim(),
+        redeemedAt: new Date().toISOString()
       };
     }
     return c;
   });
 
   const updatedUsers = [newUser, ...users];
-
   localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
   localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(updatedCodes));
 
@@ -423,10 +214,10 @@ export const registerUser = ({ name, email, age, profession, referralCode, locat
   return newUser;
 };
 
-export const generateReferralCodes = (count = 5, prefix = 'ARCH') => {
+export const generateReferralCodes = (count = 5, prefix = 'NEXUS') => {
   const codes = getStoredReferralCodes();
   const newCodes = [];
-  const cleanPrefix = (prefix || 'ARCH').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const cleanPrefix = (prefix || 'NEXUS').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
   for (let i = 0; i < count; i++) {
     const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -454,6 +245,17 @@ export const deleteReferralCode = (codeToDelete) => {
 
 export const getGeographicInsights = () => {
   const users = getStoredUsers();
+  
+  if (users.length === 0) {
+    return {
+      totalUsers: 0,
+      remainingSlots: getRemainingSlots(),
+      rankedCities: [],
+      countryBreakdown: {},
+      topCandidate: null
+    };
+  }
+
   const cityMap = {};
   const countryMap = {};
 
@@ -496,9 +298,9 @@ export const getGeographicInsights = () => {
 };
 
 export const resetStoreToMockData = () => {
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([]));
   localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(INITIAL_REFERRAL_CODES));
-  return { users: INITIAL_USERS, codes: INITIAL_REFERRAL_CODES };
+  return { users: [], codes: INITIAL_REFERRAL_CODES };
 };
 
 // Admin authentication helpers

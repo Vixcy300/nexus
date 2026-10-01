@@ -1,6 +1,4 @@
-import { Lock } from 'lucide-react'
-
-export default function Footer({ onOpenAdminLogin }) {
+export default function Footer() {
   return (
     <footer className="bg-ink-950 border-t border-white/5 pt-20 pb-8" id="contact">
       <div className="max-w-7xl mx-auto px-6 md:px-12">
@@ -77,16 +75,6 @@ export default function Footer({ onOpenAdminLogin }) {
             <a href="#faq" className="hover:text-white transition-colors">Privacy Policy</a>
             <span>&bull;</span>
             <a href="#faq" className="hover:text-white transition-colors">Terms of Service</a>
-            <span>&bull;</span>
-            {/* Subtle, discreet Admin Link */}
-            <button
-              onClick={onOpenAdminLogin}
-              className="flex items-center gap-1.5 text-mist-700 hover:text-signal transition-colors cursor-pointer"
-              title="Studio Administration"
-            >
-              <Lock size={12} />
-              <span>Admin Portal</span>
-            </button>
           </div>
         </div>
       </div>
