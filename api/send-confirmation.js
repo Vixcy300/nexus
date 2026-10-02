@@ -58,165 +58,178 @@ export default async function handler(req, res) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your NEXUS Pioneer Pass is Confirmed</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>NEXUS Studio — Pioneer Pass Confirmation</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      supported-color-schemes: light dark;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+    @media (prefers-color-scheme: dark) {
+      .email-bg { background-color: #0b0f17 !important; }
+      .email-card { background-color: #111827 !important; border-color: #1f2937 !important; }
+      .email-title { color: #f8fafc !important; }
+      .email-text { color: #94a3b8 !important; }
+      .info-box { background-color: #1e293b !important; border-color: #334155 !important; }
+      .info-title { color: #38bdf8 !important; }
+      .info-text { color: #cbd5e1 !important; }
+      .table-box { background-color: #0f172a !important; border-color: #1e293b !important; }
+      .table-label { color: #94a3b8 !important; border-color: #1e293b !important; }
+      .table-val { color: #f8fafc !important; border-color: #1e293b !important; }
+      .btn-primary { background-color: #ffffff !important; color: #0f172a !important; }
+      .footer-text { color: #64748b !important; }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8fafc; padding: 40px 16px;">
+<body style="margin: 0; padding: 0; background-color: #f1f5f9;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="email-bg" style="background-color: #f1f5f9; padding: 32px 12px;">
     <tr>
       <td align="center">
-        <!-- Main Card Container -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+        <!-- Main Container -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="email-card" style="max-width: 580px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);">
           
-          <!-- Top Accent Stripe -->
+          <!-- Corporate Brand Bar -->
           <tr>
-            <td height="4" style="background: linear-gradient(90deg, #10b981, #059669, #e8ff47);"></td>
-          </tr>
-
-          <!-- Header & Brand -->
-          <tr>
-            <td style="padding: 36px 36px 24px 36px;">
+            <td style="padding: 28px 32px 20px 32px; border-bottom: 1px solid #f1f5f9;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
-                  <td>
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">
-                      NEXUS <span style="color: #10b981;">STUDIO</span>
-                    </div>
-                    <div style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #059669; font-weight: 700; margin-top: 4px;">
-                      Early Pioneer Pass • Confirmed
+                  <td valign="middle">
+                    <span style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; text-decoration: none;">
+                      NEXUS <span style="font-weight: 400; color: #64748b;">STUDIO</span>
+                    </span>
+                    <div style="font-size: 11px; color: #64748b; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600; margin-top: 2px;">
+                      Computational Architecture Suite
                     </div>
                   </td>
-                  <td align="right">
-                    <span style="display: inline-block; background-color: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px;">
-                      $0 Free Lifetime
+                  <td align="right" valign="middle">
+                    <span style="display: inline-block; background-color: #f8fafc; border: 1px solid #e2e8f0; color: #0f172a; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.3px;">
+                      PIONEER PASS • CONFIRMED
                     </span>
                   </td>
                 </tr>
               </table>
+            </td>
+          </tr>
 
-              <!-- Main Greeting -->
-              <h1 style="margin: 24px 0 8px 0; font-size: 24px; line-height: 1.3; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">
-                Thank you for registering, ${userName}!
+          <!-- Welcome & Registration Confirmation -->
+          <tr>
+            <td style="padding: 28px 32px 20px 32px;">
+              <h1 class="email-title" style="margin: 0 0 10px 0; font-size: 22px; font-weight: 700; color: #0f172a; letter-spacing: -0.3px; line-height: 1.3;">
+                Registration Confirmed, ${userName}
               </h1>
-              <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #475569;">
-                Your Pioneer Access Pass has been successfully verified and reserved. You are officially verified as Pioneer Member <strong style="color: #0f172a; font-family: 'SF Mono', Consolas, monospace;">#${userNumber}</strong>.
+              <p class="email-text" style="margin: 0; font-size: 14px; line-height: 1.6; color: #334155;">
+                Thank you for reserving your Free Early Pioneer Pass. Your lifetime license allocation has been officially verified and assigned to your account under Pioneer Member <strong style="color: #0f172a;">#${userNumber}</strong>.
               </p>
             </td>
           </tr>
 
-          <!-- Launch Availability Notice Box -->
+          <!-- Launch Availability & Notification Status Box -->
           <tr>
-            <td style="padding: 0 36px 24px 36px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px 20px;">
-                <tr>
-                  <td>
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 6px;">
-                      🔔 We will notify you when services & downloads go live!
-                    </div>
-                    <div style="font-size: 13px; line-height: 1.6; color: #15803d;">
-                      Our team is putting the final touches on our CAD blocks, Revit smart families, and AI prompt synthesizer. As a verified Early Pioneer, you will receive an exclusive priority email with direct access the moment our service goes live.
-                    </div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Pass Details Table -->
-          <tr>
-            <td style="padding: 0 36px 24px 36px;">
-              <div style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 700; margin-bottom: 10px;">
-                Verified Pass Credentials
+            <td style="padding: 0 32px 22px 32px;">
+              <div class="info-box" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #0f172a; border-radius: 8px; padding: 16px 18px;">
+                <div class="info-title" style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 5px;">
+                  Service &amp; Download Release Notification
+                </div>
+                <div class="info-text" style="font-size: 13px; line-height: 1.55; color: #475569;">
+                  Our architecture team is completing final calibration on the production BIM families, dynamic AutoCAD library, and AI prompt workflows. As a confirmed Pioneer Member, you will receive an exclusive release email with direct download access the moment services go live.
+                </div>
               </div>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 13px;">
-                <tr>
-                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #e2e8f0; width: 35%;">Member ID:</td>
-                  <td style="padding: 12px 16px; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-family: 'SF Mono', Consolas, monospace; font-weight: 700;">#${userNumber}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #e2e8f0;">Email:</td>
-                  <td style="padding: 12px 16px; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${email}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #e2e8f0;">Professional Role:</td>
-                  <td style="padding: 12px 16px; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${userRole}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #e2e8f0;">Country:</td>
-                  <td style="padding: 12px 16px; color: #0f172a; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${userCountry}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #e2e8f0;">Invitation Pass Code:</td>
-                  <td style="padding: 12px 16px; color: #059669; border-bottom: 1px solid #e2e8f0; font-family: 'SF Mono', Consolas, monospace; font-weight: 700;">${userCode}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 16px; color: #64748b;">Allocation Status:</td>
-                  <td style="padding: 12px 16px; color: #15803d; font-weight: 700;">✓ 100% Free Lifetime Reserved</td>
-                </tr>
-              </table>
             </td>
           </tr>
 
-          <!-- Reserved Architectural Library -->
+          <!-- Membership Credentials Summary -->
           <tr>
-            <td style="padding: 0 36px 28px 36px;">
-              <div style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 700; margin-bottom: 12px;">
-                Reserved Assets For Your Pass
+            <td style="padding: 0 32px 24px 32px;">
+              <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; margin-bottom: 8px;">
+                Membership Credentials
               </div>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="table-box" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px;">
                 <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #334155;">
-                    <span style="color: #10b981; font-weight: bold; margin-right: 8px;">✓</span> <strong>AutoCAD Dynamic Blocks (.DWG)</strong> — AIA-compliant stretch & visibility states
+                  <td class="table-label" style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #f1f5f9; width: 38%;">Member ID:</td>
+                  <td class="table-val" style="padding: 10px 14px; color: #0f172a; font-weight: 700; border-bottom: 1px solid #f1f5f9;">#${userNumber}</td>
+                </tr>
+                <tr>
+                  <td class="table-label" style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Registered Email:</td>
+                  <td class="table-val" style="padding: 10px 14px; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${email}</td>
+                </tr>
+                <tr>
+                  <td class="table-label" style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Professional Discipline:</td>
+                  <td class="table-val" style="padding: 10px 14px; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${userRole}</td>
+                </tr>
+                <tr>
+                  <td class="table-label" style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Geographic Country:</td>
+                  <td class="table-val" style="padding: 10px 14px; color: #0f172a; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${userCountry}</td>
+                </tr>
+                <tr>
+                  <td class="table-label" style="padding: 10px 14px; color: #64748b; border-bottom: 1px solid #f1f5f9;">Invitation Pass Code:</td>
+                  <td class="table-val" style="padding: 10px 14px; color: #0f172a; font-family: monospace; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${userCode}</td>
+                </tr>
+                <tr>
+                  <td class="table-label" style="padding: 10px 14px; color: #64748b;">License Tier:</td>
+                  <td class="table-val" style="padding: 10px 14px; color: #059669; font-weight: 700;">100% Free Lifetime ($0 / Perpetual)</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Allocated Toolsets Overview -->
+          <tr>
+            <td style="padding: 0 32px 28px 32px;">
+              <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; margin-bottom: 8px;">
+                Allocated Resource Package
+              </div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="table-box" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
+                <tr>
+                  <td style="padding: 5px 0; font-size: 13px; color: #334155; line-height: 1.5;">
+                    • <strong>Dynamic AutoCAD Blocks (.DWG)</strong> — Full architectural stretch, visibility, and layer standards
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #334155;">
-                    <span style="color: #10b981; font-weight: bold; margin-right: 8px;">✓</span> <strong>Parametric Revit Families (.RFA)</strong> — LOD 350+ smart BIM families with shared parameters
+                  <td style="padding: 5px 0; font-size: 13px; color: #334155; line-height: 1.5;">
+                    • <strong>Parametric Revit Families (.RFA)</strong> — LOD 350+ smart BIM components with shared parameters
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #334155;">
-                    <span style="color: #10b981; font-weight: bold; margin-right: 8px;">✓</span> <strong>Calibrated AI Prompt Engine</strong> — Production Midjourney & SDXL architectural workflows
+                  <td style="padding: 5px 0; font-size: 13px; color: #334155; line-height: 1.5;">
+                    • <strong>Calibrated AI Design Workflows</strong> — Production Midjourney &amp; SDXL architectural prompt schemas
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #334155;">
-                    <span style="color: #10b981; font-weight: bold; margin-right: 8px;">✓</span> <strong>Commercial Practice License</strong> — Perpetual, royalty-free usage across client projects
+                  <td style="padding: 5px 0; font-size: 13px; color: #334155; line-height: 1.5;">
+                    • <strong>Commercial Studio License</strong> — Perpetual commercial rights across firm client deliverables
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <!-- Platform Link Button -->
+          <!-- Call to Action Button -->
           <tr>
-            <td style="padding: 0 36px 36px 36px; text-align: center;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                <tr>
-                  <td align="center">
-                    <a href="https://nexus-ashy-nu-13.vercel.app" target="_blank" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 14px 32px; border-radius: 30px; letter-spacing: 0.3px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);">
-                      Visit NEXUS Studio →
-                    </a>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding: 0 32px 32px 32px; text-align: center;">
+              <a href="https://nexus-ashy-nu-13.vercel.app" target="_blank" class="btn-primary" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 13px 30px; border-radius: 6px; letter-spacing: 0.2px;">
+                Access NEXUS Studio Portal →
+              </a>
             </td>
           </tr>
 
-          <!-- Divider -->
+          <!-- Corporate Footer -->
           <tr>
-            <td style="padding: 0 36px;">
-              <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 0;">
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 24px 36px 32px 36px; text-align: center;">
-              <p style="margin: 0 0 6px 0; font-size: 12px; color: #64748b;">
-                Questions or studio inquiries? Contact us directly at <a href="mailto:${smtpUser}" style="color: #059669; text-decoration: none; font-weight: 600;">${smtpUser}</a>
+            <td style="padding: 22px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+              <p class="footer-text" style="margin: 0 0 6px 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+                For studio inquiries or technical support, contact our team directly at <a href="mailto:${smtpUser}" style="color: #0f172a; text-decoration: underline; font-weight: 500;">${smtpUser}</a>
               </p>
-              <p style="margin: 0; font-size: 11px; color: #94a3b8; font-family: 'SF Mono', Consolas, Monaco, monospace;">
-                NEXUS Studio © 2026. Reserved for verified early pioneer pass holders.
+              <p class="footer-text" style="margin: 0; font-size: 11px; color: #94a3b8;">
+                NEXUS Studio • Advanced Computational Architecture &amp; Technology<br>
+                This official confirmation was sent to ${email} for Pioneer Pass reservation.
               </p>
             </td>
           </tr>
@@ -230,10 +243,10 @@ export default async function handler(req, res) {
     `;
 
     const info = await transporter.sendMail({
-      from: `"NEXUS Platform" <${smtpUser}>`,
+      from: `"NEXUS Studio" <${smtpUser}>`,
       to: email,
-      subject: `[Pass #${userNumber}] Thank You! Your Free NEXUS Pioneer Pass is Confirmed`,
-      text: `Thank you, ${userName}! Your NEXUS Pioneer Pass #${userNumber} has been verified and reserved. Country: ${userCountry}. Referral Code: ${userCode}. We will notify you directly at this email address as soon as our platform and services go live at https://nexus-ashy-nu-13.vercel.app`,
+      subject: `NEXUS Studio — Your Early Pioneer Pass (#${userNumber}) is Confirmed`,
+      text: `Dear ${userName},\n\nThank you for reserving your Free Early Pioneer Pass with NEXUS Studio. Your lifetime membership (#${userNumber}) has been verified and confirmed.\n\nCountry: ${userCountry}\nInvitation Pass Code: ${userCode}\nStatus: 100% Free Lifetime Reserved\n\nWe will notify you directly at this email address with your download links the moment platform services go live.\n\nVisit NEXUS Studio: https://nexus-ashy-nu-13.vercel.app\n\nNEXUS Studio Team`,
       html: emailHtml,
     });
 

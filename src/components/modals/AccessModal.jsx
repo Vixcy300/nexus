@@ -309,7 +309,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -321,40 +321,45 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
         {/* Modal Window */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-lg max-h-[92vh] flex flex-col bg-ink-900 border border-white/15 rounded-3xl shadow-2xl z-10 overflow-hidden"
+          initial={{ opacity: 0, y: 35, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 35, scale: 0.98 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="relative w-full max-w-lg max-h-[90dvh] sm:max-h-[88vh] flex flex-col bg-ink-900 border border-white/15 rounded-t-3xl sm:rounded-3xl shadow-2xl z-10 overflow-hidden"
         >
+          {/* Mobile Drag Indicator */}
+          <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-2.5 mb-0.5 sm:hidden shrink-0" />
+
           {/* Header */}
-          <div className="shrink-0 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-white/10 flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-1.5 h-1.5 bg-signal rounded-full animate-pulse-slow" />
-                <span className="font-mono text-[10px] text-signal uppercase tracking-widest font-bold">
+          <div className="shrink-0 px-4 sm:px-7 pt-2.5 sm:pt-6 pb-3 sm:pb-4 border-b border-white/10 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <span className="w-1.5 h-1.5 bg-signal rounded-full animate-pulse-slow shrink-0" />
+                <span className="font-mono text-[9px] sm:text-[10px] text-signal uppercase tracking-wider font-bold">
                   First 1,000 Early Pioneer Pass
                 </span>
-                <span className="font-mono text-[10px] text-ink-950 bg-signal font-bold px-2 py-0.5 rounded-full ml-1">
+                <span className="font-mono text-[9px] sm:text-[10px] text-ink-950 bg-signal font-bold px-1.5 py-0.2 rounded-full">
                   {remainingSlots} Left
                 </span>
               </div>
-              <h3 className="font-display text-xl sm:text-2xl font-bold text-white leading-tight">
+              <h3 className="font-display text-lg sm:text-2xl font-bold text-white leading-tight">
                 Claim 100% Free Lifetime Access
               </h3>
-              <p className="font-body text-[11px] sm:text-xs text-mist-900 mt-0.5">
+              <p className="font-body text-[11px] sm:text-xs text-mist-700 mt-0.5 truncate">
                 AutoCAD templates · Revit families · AI prompt suite
               </p>
             </div>
             <button
               onClick={() => !isSubmitting && resetForm()}
-              className="p-1.5 rounded-full text-mist-700 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+              className="p-2 -mr-1 -mt-1 rounded-full text-mist-500 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+              aria-label="Close modal"
             >
               <X size={18} />
             </button>
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-7 py-5 sm:py-6">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-7 py-4 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {registeredUser ? (
               /* Success Screen - Fully Mobile Responsive & Informative */
               <div className="text-center py-2 sm:py-4 space-y-4">
@@ -519,8 +524,8 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                     required
                     value={referralCode}
                     onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                    placeholder="Enter your referral code"
-                    className="w-full bg-ink-900 border border-white/15 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white font-mono text-base sm:text-sm tracking-wider focus:outline-none focus:border-signal transition-colors"
+                    placeholder="Enter referral code"
+                    className="w-full bg-ink-900 border border-white/15 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white font-mono text-sm tracking-normal sm:tracking-wider focus:outline-none focus:border-signal transition-colors"
                   />
                   {codeStatus && (
                     <div
@@ -598,20 +603,22 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                   </div>
                 )}
 
-                {/* Primary Action Button */}
-                <button
-                  type={locationStatus === 'ok' && locationRef.current?.latitude ? 'submit' : 'button'}
-                  onClick={handlePrimaryAction}
-                  disabled={isSubmitting || isLocating}
-                  className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-3.5 sm:py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting || isLocating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                  <span>{btnLabel()}</span>
-                </button>
+                {/* Primary Action Button & Safe Area */}
+                <div className="pt-2 pb-5 sm:pb-1">
+                  <button
+                    type={locationStatus === 'ok' && locationRef.current?.latitude ? 'submit' : 'button'}
+                    onClick={handlePrimaryAction}
+                    disabled={isSubmitting || isLocating}
+                    className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-3.5 sm:py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting || isLocating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                    <span>{btnLabel()}</span>
+                  </button>
 
-                <p className="text-center font-mono text-[10px] sm:text-[11px] text-mist-900 leading-snug">
-                  🔒 Strictly limited to 1,000 passes. One claim per verified creator.
-                </p>
+                  <p className="text-center font-mono text-[10px] sm:text-[11px] text-mist-900 leading-snug mt-2.5">
+                    🔒 Strictly limited to 1,000 passes. One claim per verified creator.
+                  </p>
+                </div>
               </form>
             )}
           </div>
