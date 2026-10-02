@@ -2,120 +2,138 @@ import { motion, useMotionValue, useSpring } from 'framer-motion'
 import { useState, useEffect } from 'react'
 
 export default function CustomCursor() {
-  const [isTouchDevice, setIsTouchDevice] = useState(false)
   const [cursorState, setCursorState] = useState('default') // 'default'|'hover'|'text'|'view'
-  const [isVisible, setIsVisible] = useState(false)
-
-  const mouseX = useMotionValue(-200)
-  const mouseY = useMotionValue(-200)
-
-  // Outer trailing ring — slower
-  const trailX = useSpring(mouseX, { stiffness: 120, damping: 22 })
-  const trailY = useSpring(mouseY, { stiffness: 120, damping: 22 })
-
-  // Inner dot — snappier
-  const dotX = useSpring(mouseX, { stiffness: 600, damping: 38 })
-  const dotY = useSpring(mouseY, { stiffness: 600, damping: 38 })
+  
+  const mouseX = useMotionValue(-100)
+  const mouseY = useMotionValue(-100)
+  
+  // Outer trail
+  const trailX = useSpring(mouseX, { stiffness: 150, damping: 25 })
+  const trailY = useSpring(mouseY, { stiffness: 150, damping: 25 })
+  
+  // Inner dot
+  const springX = useSpring(mouseX, { stiffness: 500, damping: 40 })
+  const springY = useSpring(mouseY, { stiffness: 500, damping: 40 })
 
   useEffect(() => {
-    // Hide on touch/mobile devices
-    const isTouch = window.matchMedia('(pointer: coarse)').matches ||
-      ('ontouchstart' in window) ||
-      (navigator.maxTouchPoints > 0)
-    if (isTouch) {
-      setIsTouchDevice(true)
-      return
-    }
-
-    const onMove = (e) => {
+    const onMouseMove = (e) => {
       mouseX.set(e.clientX)
       mouseY.set(e.clientY)
-      if (!isVisible) setIsVisible(true)
     }
-
-    const onEnter = () => setIsVisible(true)
-    const onLeave = () => setIsVisible(false)
-
-    window.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseenter', onEnter)
-    document.addEventListener('mouseleave', onLeave)
-
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseenter', onEnter)
-      document.removeEventListener('mouseleave', onLeave)
-    }
-  }, [mouseX, mouseY, isVisible])
+    window.addEventListener('mousemove', onMouseMove)
+    return () => window.removeEventListener('mousemove', onMouseMove)
+  }, [mouseX, mouseY])
 
   useEffect(() => {
-    if (isTouchDevice) return
-
-    const handleOver = (e) => {
+    const handleMouseOver = (e) => {
       const el = e.target.closest('[data-cursor]')
-      setCursorState(el ? (el.getAttribute('data-cursor') || 'hover') : 'default')
+      if (el) {
+        setCursorState(el.getAttribute('data-cursor'))
+      }
     }
-    document.addEventListener('mouseover', handleOver)
-    return () => document.removeEventListener('mouseover', handleOver)
-  }, [isTouchDevice])
+    const handleMouseOut = (e) => {
+      // Only reset if we are not moving into another data-cursor element
+      if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-cursor]')) {
+        return;
+      }
+      setCursorState('default')
+    }
+    
+    document.addEventListener('mouseover', handleMouseOver)
+    document.addEventListener('mouseout', handleMouseOut)
+    
+    return () => {
+      document.removeEventListener('mouseover', handleMouseOver)
+      document.removeEventListener('mouseout', handleMouseOut)
+    }
+  }, [])
 
-  // Don't render at all on touch devices or until first movement
-  if (isTouchDevice) return null
-
-  const dotVariants = {
-    default: { width: 10, height: 10, borderRadius: '50%', backgroundColor: '#ffffff', opacity: isVisible ? 1 : 0 },
-    hover:   { width: 44, height: 44, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)', opacity: 1 },
-    text:    { width: 3,  height: 20, borderRadius: '2px', backgroundColor: '#ffffff', opacity: 1 },
-    view:    { width: 56, height: 56, borderRadius: '50%', backgroundColor: 'transparent', border: '1.5px solid #ffffff', opacity: 1 },
+  // Variants for the inner tracker (usually text or specific shape)
+  const variants = {
+    default: {
+      width: 12,
+      height: 12,
+      x: "-50%",
+      y: "-50%",
+      borderRadius: "50%",
+      backgroundColor: "#ffffff",
+      opacity: 1
+    },
+    hover: {
+      width: 48,
+      height: 48,
+      x: "-50%",
+      y: "-50%",
+      borderRadius: "50%",
+      backgroundColor: "#ffffff",
+      opacity: 1
+    },
+    text: {
+      width: 4,
+      height: 24,
+      x: "-2px",
+      y: "-12px",
+      borderRadius: "2px",
+      backgroundColor: "#ffffff",
+      opacity: 1
+    },
+    view: {
+      width: 64,
+      height: 64,
+      x: "-50%",
+      y: "-50%",
+      borderRadius: "50%",
+      backgroundColor: "transparent",
+      border: "1px solid #ffffff",
+      opacity: 1
+    }
   }
 
-  const ringVariants = {
-    default: { width: 34, height: 34, opacity: isVisible ? 0.25 : 0, border: '1px solid #ffffff', backgroundColor: 'transparent' },
-    hover:   { width: 0,  height: 0,  opacity: 0 },
-    text:    { width: 0,  height: 0,  opacity: 0 },
-    view:    { width: 0,  height: 0,  opacity: 0 },
+  // Define trailing ring states
+  const trailingVariants = {
+    default: {
+      width: 32,
+      height: 32,
+      opacity: 0.3,
+      border: "1px solid #ffffff",
+      backgroundColor: "transparent"
+    },
+    hover: { opacity: 0 },
+    text: { opacity: 0 },
+    view: { opacity: 0 }
   }
 
+  // Using a portal or just fixed positioning
   return (
     <>
-      {/* Inner dot / shape */}
       <motion.div
-        className="fixed top-0 left-0 z-[9999] pointer-events-none"
+        className="fixed top-0 left-0 z-[9999] pointer-events-none flex justify-center items-center text-ink-950 font-mono text-[10px] tracking-widest font-bold overflow-hidden"
         style={{
-          x: dotX,
-          y: dotY,
-          translateX: '-50%',
-          translateY: '-50%',
-          mixBlendMode: 'difference',
+          x: springX,
+          y: springY,
+          mixBlendMode: 'difference'
         }}
-        variants={dotVariants}
+        variants={variants}
         animate={cursorState}
-        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+        transition={{ type: "spring", stiffness: 400, damping: 28 }}
       >
-        {cursorState === 'hover' && (
-          <span className="absolute inset-0 flex items-center justify-center text-ink-950 font-mono text-[9px] font-bold tracking-widest">
-            CLICK
-          </span>
-        )}
-        {cursorState === 'view' && (
-          <span className="absolute inset-0 flex items-center justify-center text-white font-mono text-[9px] font-bold tracking-widest">
-            VIEW
-          </span>
-        )}
+        {cursorState === 'hover' && "CLICK"}
+        {cursorState === 'view' && "VIEW"}
       </motion.div>
 
-      {/* Trailing ring */}
       <motion.div
-        className="fixed top-0 left-0 z-[9998] pointer-events-none rounded-full"
+        className="fixed top-0 left-0 z-[9998] pointer-events-none rounded-full flex justify-center items-center"
         style={{
           x: trailX,
           y: trailY,
-          translateX: '-50%',
-          translateY: '-50%',
-          mixBlendMode: 'difference',
+          xOffset: "-50%",
+          yOffset: "-50%",
+          transform: "translate(-50%, -50%)",
+          mixBlendMode: 'difference'
         }}
-        variants={ringVariants}
+        variants={trailingVariants}
         animate={cursorState}
-        transition={{ duration: 0.15 }}
+        transition={{ duration: 0.2 }}
       />
     </>
   )

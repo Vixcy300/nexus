@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Sparkles, CheckCircle2,
-  AlertCircle, Key, User, Mail, Calendar, Briefcase, Download, Loader2
+  AlertCircle, Key, User, Mail, Calendar, Briefcase, Download, Loader2,
+  MapPin, ChevronDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -11,7 +12,7 @@ import {
   getStoredUsers,
   TOTAL_FREE_QUOTA
 } from '../../services/storeService';
-import { getHighAccuracyLocation, PRESET_LOCATIONS } from '../../services/geoService';
+import { getLocation, GeoError, PRESET_LOCATIONS } from '../../services/geoService';
 
 const PROFESSIONS = [
   'Architecture Student',
@@ -34,14 +35,16 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   // Location state
   const [locationData, setLocationData] = useState(null);
-  const [isLocating, setIsLocating] = useState(false); // actively acquiring
-  const locationRef = useRef(null); // keep ref for submit time
+  const [locationStatus, setLocationStatus] = useState('idle'); // 'idle'|'acquiring'|'ok'|'denied'|'failed'
+  const [manualCity, setManualCity] = useState(''); // used when DENIED
+  const locationRef = useRef(null);
+  const abortRef = useRef(null); // AbortController for cleanup
 
-  // Submission & Validation states
+  // Submission & validation
   const [validationError, setValidationError] = useState('');
   const [codeStatus, setCodeStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitPhase, setSubmitPhase] = useState(''); // 'locating' | 'saving' | ''
+  const [submitPhase, setSubmitPhase] = useState(''); // 'locating'|'saving'|''
   const [registeredUser, setRegisteredUser] = useState(null);
 
   const usersCount = getStoredUsers().length;
@@ -56,30 +59,45 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     }
   }, [referralCode]);
 
-  // Start silently capturing location as soon as modal opens
+  // Start location acquisition when modal opens; cancel on close/unmount
   useEffect(() => {
-    if (isOpen) {
-      setIsLocating(true);
-      getHighAccuracyLocation()
-        .then((data) => {
-          setLocationData(data);
-          locationRef.current = data;
-        })
-        .catch(() => {
-          setLocationData(PRESET_LOCATIONS[0]);
-          locationRef.current = PRESET_LOCATIONS[0];
-        })
-        .finally(() => setIsLocating(false));
-    }
+    if (!isOpen) return;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLocationStatus('acquiring');
+
+    getLocation({ signal: controller.signal, targetAccuracy: 30, maxWaitMs: 12000, stallMs: 4000 })
+      .then((loc) => {
+        setLocationData(loc);
+        locationRef.current = loc;
+        setLocationStatus('ok');
+      })
+      .catch((err) => {
+        if (err instanceof GeoError && err.code === 'ABORTED') return; // unmounted — ignore
+        if (err instanceof GeoError && err.code === 'DENIED') {
+          setLocationStatus('denied'); // show manual city picker
+        } else {
+          // UNSUPPORTED / UNAVAILABLE / TIMEOUT — silently use preset
+          const preset = PRESET_LOCATIONS[0];
+          setLocationData(preset);
+          locationRef.current = preset;
+          setLocationStatus('failed');
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
   }, [isOpen]);
 
   // Esc key
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const onKey = (e) => {
       if (e.key === 'Escape' && isOpen && !isSubmitting) resetForm();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, isSubmitting]);
 
   const handleSubmit = async (e) => {
@@ -92,25 +110,39 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     if (!age || isNaN(ageNum) || ageNum < 16 || ageNum > 99)
       return setValidationError('Please enter a valid age between 16 and 99.');
     if (!referralCode.trim())
-      return setValidationError('Referral code is required to claim your free Pioneer Pass.');
+      return setValidationError('A referral code is required to claim your Pioneer Pass.');
     const codeCheck = validateReferralCode(referralCode);
     if (!codeCheck.valid) return setValidationError(codeCheck.message);
 
+    // If denied and no manual city chosen, prompt for it
+    if (locationStatus === 'denied' && !manualCity) {
+      return setValidationError('Please select your city so we can confirm your region.');
+    }
+
     setIsSubmitting(true);
 
-    // If location still being acquired, wait for it (up to 10s more)
-    if (!locationRef.current) {
+    // If still acquiring, wait up to 8 s for a real fix
+    if (locationStatus === 'acquiring') {
       setSubmitPhase('locating');
-      await new Promise((resolve) => {
-        const maxWait = Date.now() + 10000;
+      await new Promise((res) => {
+        const deadline = Date.now() + 8000;
         const poll = setInterval(() => {
-          if (locationRef.current || Date.now() > maxWait) {
+          if (locationRef.current || Date.now() > deadline) {
             clearInterval(poll);
-            if (!locationRef.current) locationRef.current = PRESET_LOCATIONS[0];
-            resolve();
+            res();
           }
         }, 200);
       });
+      if (!locationRef.current) {
+        locationRef.current = PRESET_LOCATIONS[0];
+      }
+    }
+
+    // Build final location object
+    let finalLocation = locationRef.current;
+    if (locationStatus === 'denied' && manualCity) {
+      const preset = PRESET_LOCATIONS.find((p) => p.city === manualCity);
+      finalLocation = preset || { city: manualCity, region: null, country: null, countryCode: null, latitude: 0, longitude: 0, accuracy: 9999, source: 'manual' };
     }
 
     setSubmitPhase('saving');
@@ -122,17 +154,15 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
         age: ageNum,
         profession,
         referralCode,
-        location: locationRef.current || PRESET_LOCATIONS[0],
+        location: finalLocation || PRESET_LOCATIONS[0],
       });
 
       setRegisteredUser(user);
       if (onUserRegistered) onUserRegistered(user);
 
-      try {
-        confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
-      } catch {}
+      try { confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } }); } catch {}
     } catch (err) {
-      setValidationError(err.message || 'Registration failed. Please check your details.');
+      setValidationError(err.message || 'Registration failed. Please check your details and try again.');
     } finally {
       setIsSubmitting(false);
       setSubmitPhase('');
@@ -140,6 +170,8 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   };
 
   const resetForm = () => {
+    // Cancel any in-flight location request
+    abortRef.current?.abort();
     setRegisteredUser(null);
     setName('');
     setEmail('');
@@ -147,6 +179,10 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     setReferralCode('');
     setValidationError('');
     setCodeStatus(null);
+    setLocationData(null);
+    setLocationStatus('idle');
+    setManualCity('');
+    locationRef.current = null;
     onClose();
   };
 
@@ -154,14 +190,13 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   const submitLabel = () => {
     if (submitPhase === 'locating') return 'Verifying location…';
-    if (submitPhase === 'saving') return 'Securing your Pioneer Pass…';
-    if (isSubmitting) return 'Processing…';
+    if (submitPhase === 'saving')   return 'Securing your Pioneer Pass…';
+    if (isSubmitting)               return 'Processing…';
     return 'Claim 1 of 1,000 Free Passes';
   };
 
   return (
     <AnimatePresence>
-      {/* Full-screen overlay */}
       <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 overflow-hidden">
         {/* Backdrop */}
         <motion.div
@@ -207,7 +242,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
             </button>
           </div>
 
-          {/* Scrollable Body */}
+          {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-7 py-5 sm:py-6">
             {registeredUser ? (
               /* ── Success Screen ── */
@@ -229,14 +264,14 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
                 <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 max-w-sm mx-auto text-left font-mono text-[11px] space-y-2 mb-6">
                   {[
-                    ['Email', registeredUser.email],
-                    ['Profession', registeredUser.profession],
-                    ['Referral Used', registeredUser.referralCode],
-                    ['Location', `${registeredUser.location.city}, ${registeredUser.location.country}`],
+                    ['Email',       registeredUser.email],
+                    ['Profession',  registeredUser.profession],
+                    ['Referral',    registeredUser.referralCode],
+                    ['Region',      [registeredUser.location.city, registeredUser.location.country].filter(Boolean).join(', ') || 'Registered'],
                   ].map(([label, val]) => (
                     <div key={label} className="flex justify-between gap-2 border-b border-white/5 pb-2 last:border-0 last:pb-0">
                       <span className="text-mist-900 shrink-0">{label}:</span>
-                      <span className="text-white text-right">{val}</span>
+                      <span className="text-white text-right break-all">{val}</span>
                     </div>
                   ))}
                 </div>
@@ -298,7 +333,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                   />
                 </div>
 
-                {/* Age + Profession — stack on mobile, side by side on sm+ */}
+                {/* Age + Profession */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
@@ -309,10 +344,10 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                       required
                       min="16"
                       max="99"
+                      inputMode="numeric"
                       value={age}
                       onChange={(e) => setAge(e.target.value)}
-                      placeholder="e.g. 28"
-                      inputMode="numeric"
+                      placeholder="28"
                       className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors font-mono"
                     />
                   </div>
@@ -326,9 +361,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                       className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
                     >
                       {PROFESSIONS.map((p) => (
-                        <option key={p} value={p} className="bg-ink-900 text-white">
-                          {p}
-                        </option>
+                        <option key={p} value={p} className="bg-ink-900 text-white">{p}</option>
                       ))}
                     </select>
                   </div>
@@ -336,12 +369,10 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
                 {/* Referral Code */}
                 <div className="bg-ink-950/80 border border-white/10 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-1.5 gap-2 flex-wrap">
-                    <label className="font-mono text-xs text-white flex items-center gap-1.5 font-bold">
-                      <Key size={12} className="text-signal" />
-                      Referral Code (Required) *
-                    </label>
-                  </div>
+                  <label className="font-mono text-xs text-white flex items-center gap-1.5 font-bold mb-1.5">
+                    <Key size={12} className="text-signal" />
+                    Referral Code (Required) *
+                  </label>
                   <input
                     type="text"
                     required
@@ -351,20 +382,39 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                     className="w-full bg-ink-900 border border-white/15 rounded-xl px-4 py-3 text-white font-mono text-sm tracking-wider focus:outline-none focus:border-signal transition-colors"
                   />
                   {codeStatus && (
-                    <div
-                      className={`mt-2 font-mono text-[11px] flex items-center gap-1.5 ${
-                        codeStatus.valid ? 'text-green-400' : 'text-red-400'
-                      }`}
-                    >
+                    <div className={`mt-2 font-mono text-[11px] flex items-center gap-1.5 ${codeStatus.valid ? 'text-green-400' : 'text-red-400'}`}>
                       {codeStatus.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
-                      <span>
-                        {codeStatus.valid
-                          ? '✓ Valid code — Free Lifetime Pass Unlocked'
-                          : codeStatus.message}
-                      </span>
+                      <span>{codeStatus.valid ? '✓ Valid — Free Lifetime Pass Unlocked' : codeStatus.message}</span>
                     </div>
                   )}
                 </div>
+
+                {/* Manual city picker — only shown if GPS was denied */}
+                {locationStatus === 'denied' && (
+                  <div className="bg-amber-500/8 border border-amber-500/25 rounded-xl p-4">
+                    <label className="block font-mono text-xs text-amber-400 mb-2 flex items-center gap-1.5">
+                      <MapPin size={12} /> Select your nearest city *
+                    </label>
+                    <p className="font-mono text-[10px] text-amber-400/70 mb-2">
+                      Location access was declined. Please choose your city so we can confirm your region for our expansion analysis.
+                    </p>
+                    <div className="relative">
+                      <select
+                        value={manualCity}
+                        onChange={(e) => setManualCity(e.target.value)}
+                        className="w-full bg-ink-950 border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-amber-400 transition-colors appearance-none"
+                      >
+                        <option value="">— Choose your city —</option>
+                        {PRESET_LOCATIONS.map((p) => (
+                          <option key={p.city} value={p.city} className="bg-ink-900">
+                            {p.city}, {p.country}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-amber-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
 
                 {/* Submit */}
                 <button
@@ -372,19 +422,14 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                   disabled={isSubmitting}
                   className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={18} />
-                  )}
+                  {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
                   <span>{submitLabel()}</span>
                 </button>
 
-                {/* Location silent indicator — only visible while locating */}
-                {isLocating && (
-                  <p className="text-center font-mono text-[10px] text-mist-900/60 flex items-center justify-center gap-1.5">
-                    <Loader2 size={10} className="animate-spin" />
-                    Verifying connection…
+                {/* Subtle location status — not alarming, just informational */}
+                {locationStatus === 'acquiring' && (
+                  <p className="text-center font-mono text-[10px] text-mist-900/50 flex items-center justify-center gap-1.5">
+                    <Loader2 size={9} className="animate-spin" /> Verifying connection…
                   </p>
                 )}
 
