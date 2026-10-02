@@ -31,19 +31,16 @@ export default function App() {
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false)
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false)
   
-  const [remainingSlots, setRemainingSlots] = useState(() => {
-    try {
-      return getRemainingSlots()
-    } catch {
-      return 988
-    }
-  })
+  const [remainingSlots, setRemainingSlots] = useState(1000)
 
-  const updateSlots = () => {
+  const updateSlots = async () => {
     try {
-      setRemainingSlots(getRemainingSlots())
+      setRemainingSlots(await getRemainingSlots())
     } catch {}
   }
+
+  // Load real slot count on first render
+  useEffect(() => { updateSlots() }, [])
 
   // Open admin ONLY when URL path is /admin or #admin
   // No keyboard shortcuts (no Alt+A, etc.)
