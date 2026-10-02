@@ -285,67 +285,79 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
           {/* Body */}
           <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-7 py-5 sm:py-6">
             {registeredUser ? (
-              /* Success Screen */
-              <div className="text-center py-4">
-                <div className="w-14 h-14 rounded-2xl bg-signal/10 border border-signal/40 flex items-center justify-center text-signal mx-auto mb-4">
-                  <CheckCircle2 size={30} />
+              /* Success Screen - Fully Mobile Responsive & Informative */
+              <div className="text-center py-2 sm:py-4 space-y-4">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-signal/15 border border-signal/40 flex items-center justify-center text-signal mx-auto shadow-lg shadow-signal/15">
+                  <CheckCircle2 size={32} />
                 </div>
-                <span className="font-mono text-[10px] text-signal uppercase tracking-widest block mb-1">
-                  Access Pass Activated
-                </span>
-                <h4 className="font-display text-2xl sm:text-3xl font-bold text-white mb-2">
-                  Welcome, {registeredUser.name}!
-                </h4>
-                <p className="font-body text-xs sm:text-sm text-mist-900 max-w-sm mx-auto mb-5">
-                  You are officially Pioneer Member{' '}
-                  <span className="font-mono text-white font-bold">#{registeredUser.id}</span>.
-                </p>
-
-                <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 max-w-sm mx-auto text-left font-mono text-[11px] space-y-2 mb-4">
-                  {[
-                    ['Email', registeredUser.email],
-                    ['Role', registeredUser.profession],
-                    ['Referral', registeredUser.referralCode],
-                    [
-                      'Region',
-                      [registeredUser.location?.suburb, registeredUser.location?.city, registeredUser.location?.country]
-                        .filter(Boolean)
-                        .join(', ') || 'Global Network',
-                    ],
-                    [
-                      'Coordinates',
-                      registeredUser.location?.latitude != null
-                        ? `${Number(registeredUser.location.latitude).toFixed(4)}, ${Number(
-                            registeredUser.location.longitude
-                          ).toFixed(4)}`
-                        : 'Verified Fix',
-                    ],
-                  ].map(([l, v]) => (
-                    <div key={l} className="flex justify-between gap-2 border-b border-white/5 pb-2 last:border-0 last:pb-0">
-                      <span className="text-mist-900 shrink-0">{l}:</span>
-                      <span className="text-white text-right break-all">{v}</span>
-                    </div>
-                  ))}
+                
+                <div>
+                  <span className="font-mono text-[10px] sm:text-xs text-signal uppercase tracking-widest font-bold block mb-1">
+                    Pioneer Pass Verified &amp; Reserved
+                  </span>
+                  <h4 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                    Thank You, {registeredUser.name}!
+                  </h4>
+                  <p className="font-body text-xs sm:text-sm text-mist-700 mt-1 max-w-sm mx-auto">
+                    You are officially confirmed as Pioneer Member{' '}
+                    <span className="font-mono text-signal font-bold">#{registeredUser.id}</span>.
+                  </p>
                 </div>
 
-                <div className="flex items-center justify-center gap-1.5 text-xs text-signal font-mono mb-6 bg-signal/10 border border-signal/20 rounded-xl py-2 px-3 max-w-sm mx-auto">
-                  <Mail size={13} className="shrink-0" />
+                {/* Service Availability / Launch Notice Card */}
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 text-left text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold font-mono text-xs sm:text-sm">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>We will notify you when services go live!</span>
+                  </div>
+                  <p className="text-mist-500 font-body text-xs sm:text-sm leading-relaxed">
+                    Our computational design team is finalizing the CAD blocks, smart Revit families, and AI prompt engines. As a verified Early Pioneer, you will receive an exclusive priority email with instant access the moment downloads and services launch.
+                  </p>
+                </div>
+
+                {/* Credentials Card (Country only, mobile responsive) */}
+                <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 sm:p-5 text-left font-mono text-xs space-y-2.5">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-mist-700">Member ID:</span>
+                    <span className="font-bold text-signal">#{registeredUser.id}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-mist-700">Email:</span>
+                    <span className="text-white font-medium break-all text-right ml-2">{registeredUser.email}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-mist-700">Discipline:</span>
+                    <span className="text-white text-right ml-2">{registeredUser.profession}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-mist-700">Country:</span>
+                    <span className="text-white font-semibold text-right ml-2">
+                      {registeredUser.location?.country || 'International'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-mist-700">Pass Code:</span>
+                    <span className="text-emerald-400 font-bold">{registeredUser.referralCode}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-mist-700">Status:</span>
+                    <span className="text-emerald-400 font-bold">✓ 100% Free Lifetime Reserved</span>
+                  </div>
+                </div>
+
+                {/* Email notice badge */}
+                <div className="flex items-center justify-center gap-2 text-xs text-signal font-mono bg-signal/10 border border-signal/20 rounded-xl py-2.5 px-3">
+                  <Mail size={14} className="shrink-0" />
                   <span className="truncate">Confirmation pass sent to {registeredUser.email}</span>
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => alert('Downloading NEXUS Architectural Suite…')}
-                    className="w-full bg-signal text-ink-950 font-display font-semibold px-6 py-3.5 rounded-full hover:bg-signal-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-signal/20"
-                  >
-                    <Download size={15} />
-                    <span>Download CAD &amp; Revit Library</span>
-                  </button>
+                {/* Action button */}
+                <div className="pt-2">
                   <button
                     onClick={resetForm}
-                    className="w-full bg-ink-800 text-white font-display font-semibold px-6 py-3 rounded-full hover:bg-ink-700 border border-white/10 transition-all"
+                    className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-3.5 sm:py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2"
                   >
-                    Done
+                    <span>Done — Return to Studio</span>
                   </button>
                 </div>
               </div>
