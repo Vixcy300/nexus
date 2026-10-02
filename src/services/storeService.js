@@ -1,265 +1,322 @@
-/**
- * Store Service — Supabase-backed, fully async.
- * All user and referral-code data lives in Supabase so it's shared across
- * every device/browser. Admin auth session stays in localStorage only.
- */
-import { supabase } from './supabaseClient';
+// Store service for managing 1,000 Free Users Campaign, Referral Codes & Geolocation Analytics
+
+const STORAGE_KEYS = {
+  USERS: 'arch_nexus_users_v2',
+  CODES: 'arch_nexus_referral_codes_v2',
+  ADMIN_AUTH: 'arch_nexus_admin_session_v1',
+  QUOTA: 'arch_nexus_quota_v1'
+};
 
 export const TOTAL_FREE_QUOTA = 1000;
-const ADMIN_AUTH_KEY = 'arch_nexus_admin_session_v1';
 
-// ─── Row mappers ──────────────────────────────────────────────────────────────
+// NO fake users - starts completely clean for genuine user registrations
+const INITIAL_USERS = [];
 
-const mapUser = (r) => ({
-  id:           r.user_code || r.id,
-  uuid:         r.id,
-  name:         r.name,
-  email:        r.email,
-  age:          r.age,
-  profession:   r.profession,
-  referralCode: r.referral_code,
-  location: {
-    latitude:    r.lat          ?? null,
-    longitude:   r.lng          ?? null,
-    accuracy:    r.accuracy_m   ?? null,
-    city:        r.city         ?? null,
-    region:      r.region       ?? null,
-    country:     r.country      ?? null,
-    countryCode: r.country_code ?? null,
-    suburb:      r.suburb       ?? null,
-    postalCode:  r.postal_code  ?? null,
-    source:      r.geo_source   ?? null,
-  },
-  registeredAt: r.registered_at,
-});
-
-const mapCode = (r) => ({
-  code:        r.code,
-  status:      r.status,
-  createdAt:   r.created_at,
-  redeemedBy:  r.redeemed_by  ?? null,
-  redeemedAt:  r.redeemed_at  ?? null,
-  tags:        r.tags         ?? [],
-});
-
-// ─── Initial seed codes ───────────────────────────────────────────────────────
-
-const SEED_CODES = [
-  { code: 'ARCH-2026-ALPHA',   status: 'available', tags: ['VIP', 'CAD'] },
-  { code: 'NEXUS-BIM-101',     status: 'available', tags: ['Revit'] },
-  { code: 'NEXUS-CAD-202',     status: 'available', tags: ['AutoCAD'] },
-  { code: 'NEXUS-AI-303',      status: 'available', tags: ['AI Prompt'] },
-  { code: 'NEXUS-STUDIO-404',  status: 'available', tags: ['Studio'] },
-  { code: 'NEXUS-GEO-505',     status: 'available', tags: ['Expansion'] },
-  { code: 'REVIT-DYN-606',     status: 'available', tags: ['Dynamo'] },
-  { code: 'PARAM-GEN-707',     status: 'available', tags: ['Parametric'] },
-  { code: 'NEXUS-PIONEER-808', status: 'available', tags: ['Pioneer'] },
-  { code: 'GLOBAL-1000-FREE',  status: 'available', tags: ['General'] },
+// Clean initial active referral codes ready for real pioneers (no fake redeemed codes)
+const INITIAL_REFERRAL_CODES = [
+  { code: 'ARCH-2026-ALPHA', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['VIP', 'CAD'] },
+  { code: 'NEXUS-BIM-101', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Revit'] },
+  { code: 'NEXUS-CAD-202', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['AutoCAD'] },
+  { code: 'NEXUS-AI-303', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['AI Prompt'] },
+  { code: 'NEXUS-STUDIO-404', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Studio'] },
+  { code: 'NEXUS-GEO-505', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Expansion'] },
+  { code: 'REVIT-DYN-606', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Dynamo'] },
+  { code: 'PARAM-GEN-707', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Parametric'] },
+  { code: 'NEXUS-PIONEER-808', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['Pioneer'] },
+  { code: 'GLOBAL-1000-FREE', status: 'available', createdAt: '2026-10-01', redeemedBy: null, tags: ['General'] }
 ];
 
-// ─── Users ────────────────────────────────────────────────────────────────────
-
-export const getStoredUsers = async () => {
-  const { data, error } = await supabase
-    .from('nexus_users')
-    .select('*')
-    .order('registered_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(mapUser);
+export const getQuotaSettings = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.QUOTA);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return { totalQuota: TOTAL_FREE_QUOTA, manualRemaining: null };
 };
 
-// ─── Referral Codes ───────────────────────────────────────────────────────────
-
-export const getStoredReferralCodes = async () => {
-  const { data, error } = await supabase
-    .from('nexus_referral_codes')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  // Auto-seed if table is empty
-  if (!data || data.length === 0) {
-    await supabase.from('nexus_referral_codes').insert(SEED_CODES);
-    return SEED_CODES.map(c => ({ ...c, createdAt: new Date().toISOString(), redeemedBy: null, redeemedAt: null }));
+export const getRemainingSlots = () => {
+  const settings = getQuotaSettings();
+  const users = getStoredUsers();
+  if (settings.manualRemaining !== null && settings.manualRemaining !== undefined && !isNaN(settings.manualRemaining)) {
+    return Math.max(0, parseInt(settings.manualRemaining, 10));
   }
-  return data.map(mapCode);
+  const total = settings.totalQuota || TOTAL_FREE_QUOTA;
+  return Math.max(0, total - users.length);
 };
 
-export const validateReferralCode = async (code) => {
-  if (!code || typeof code !== 'string') return { valid: false, message: 'Referral code is required.' };
+export const setRemainingSlotsCount = (newCount) => {
+  const current = getQuotaSettings();
+  const count = parseInt(newCount, 10);
+  const updated = {
+    ...current,
+    manualRemaining: isNaN(count) ? null : Math.max(0, count)
+  };
+  localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+  return updated;
+};
+
+export const resetRemainingSlotsToAuto = () => {
+  const current = getQuotaSettings();
+  const updated = {
+    ...current,
+    manualRemaining: null
+  };
+  localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+  return { ...updated, remainingSlots: getRemainingSlots() };
+};
+
+export const setTotalQuota = (newQuota) => {
+  const current = getQuotaSettings();
+  const q = parseInt(newQuota, 10) || TOTAL_FREE_QUOTA;
+  const updated = {
+    ...current,
+    totalQuota: q
+  };
+  localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(updated));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+  return { ...updated, remainingSlots: getRemainingSlots() };
+};
+
+export const getStoredUsers = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Purge any old fake demo records
+        const genuineUsers = parsed.filter(u => !u.id?.startsWith('USR-89'));
+        if (genuineUsers.length !== parsed.length) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(genuineUsers));
+        }
+        return genuineUsers;
+      }
+    }
+  } catch {}
+  return INITIAL_USERS;
+};
+
+export const getStoredReferralCodes = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CODES);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+  localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(INITIAL_REFERRAL_CODES));
+  return INITIAL_REFERRAL_CODES;
+};
+
+export const validateReferralCode = (code) => {
+  if (!code || typeof code !== 'string') {
+    return { valid: false, message: 'Referral code is required.' };
+  }
+
   const clean = code.trim().toUpperCase();
-  const { data, error } = await supabase
-    .from('nexus_referral_codes')
-    .select('code, status')
-    .eq('code', clean)
-    .maybeSingle();
-  if (error || !data) return { valid: false, message: 'Invalid referral code. Please check your invitation pass.' };
-  if (data.status === 'redeemed') return { valid: false, message: 'This referral code has already been used.' };
-  return { valid: true, code: data.code };
+  const codes = getStoredReferralCodes();
+  const found = codes.find(c => c.code.toUpperCase() === clean);
+
+  if (!found) {
+    return { valid: false, message: 'Invalid referral code. Please check your invitation pass.' };
+  }
+
+  if (found.status === 'redeemed') {
+    return { valid: false, message: 'This referral code has already been redeemed.' };
+  }
+
+  return { valid: true, code: found.code, message: 'Valid code: 100% Free Lifetime Access Unlocked' };
 };
 
-export const generateReferralCodes = async (count = 5, prefix = 'NEXUS') => {
-  const cleanPrefix = (prefix || 'NEXUS').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'NEXUS';
-  const newCodes = Array.from({ length: parseInt(count, 10) || 5 }, () => ({
-    code:   `${cleanPrefix}-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
-    status: 'available',
-    tags:   ['Admin-Generated'],
-  }));
-  const { data, error } = await supabase.from('nexus_referral_codes').insert(newCodes).select();
-  if (error) throw error;
-  return (data || []).map(mapCode);
-};
+export const registerUser = ({ name, email, age, profession, referralCode, location }) => {
+  const users = getStoredUsers();
+  const codes = getStoredReferralCodes();
+  const quota = getRemainingSlots();
 
-export const deleteReferralCode = async (code) => {
-  const { error } = await supabase.from('nexus_referral_codes').delete().eq('code', code);
-  if (error) throw error;
-};
+  if (quota <= 0) {
+    throw new Error('All 1,000 free lifetime pioneer slots have been claimed.');
+  }
 
-// ─── Quota ────────────────────────────────────────────────────────────────────
+  // Check duplicate email
+  const existingEmail = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+  if (existingEmail) {
+    throw new Error('This email address has already claimed an access pass.');
+  }
 
-export const getQuotaSettings = async () => {
-  const { data } = await supabase.from('nexus_quota').select('*').eq('id', 1).maybeSingle();
-  if (!data) return { totalQuota: TOTAL_FREE_QUOTA, manualRemaining: null };
-  return { totalQuota: data.total_quota || TOTAL_FREE_QUOTA, manualRemaining: data.manual_remaining ?? null };
-};
+  // Validate referral code
+  const codeValidation = validateReferralCode(referralCode);
+  if (!codeValidation.valid) {
+    throw new Error(codeValidation.message);
+  }
 
-export const getRemainingSlots = async () => {
-  const [quota, { count }] = await Promise.all([
-    getQuotaSettings(),
-    supabase.from('nexus_users').select('*', { count: 'exact', head: true }),
-  ]);
-  if (quota.manualRemaining !== null && !isNaN(quota.manualRemaining)) return Math.max(0, quota.manualRemaining);
-  return Math.max(0, (quota.totalQuota || TOTAL_FREE_QUOTA) - (count || 0));
-};
+  // Generate ID
+  const newId = `USR-${Math.floor(1000 + Math.random() * 9000)}`;
 
-export const setRemainingSlotsCount = async (val) => {
-  const n = Math.max(0, parseInt(val, 10) || 0);
-  const { error } = await supabase.from('nexus_quota').upsert({ id: 1, manual_remaining: n });
-  if (error) throw error;
-  dispatchUpdate();
-  return { manualRemaining: n };
-};
-
-export const resetRemainingSlotsToAuto = async () => {
-  const { error } = await supabase.from('nexus_quota').upsert({ id: 1, manual_remaining: null });
-  if (error) throw error;
-  dispatchUpdate();
-  return { manualRemaining: null };
-};
-
-export const setTotalQuota = async (val) => {
-  const q = Math.max(1, parseInt(val, 10) || TOTAL_FREE_QUOTA);
-  const { error } = await supabase.from('nexus_quota').upsert({ id: 1, total_quota: q });
-  if (error) throw error;
-  dispatchUpdate();
-  return { totalQuota: q };
-};
-
-// ─── Registration ─────────────────────────────────────────────────────────────
-
-export const registerUser = async ({ name, email, age, profession, referralCode, location }) => {
-  // 1. Check slots
-  const remaining = await getRemainingSlots();
-  if (remaining <= 0) throw new Error('All 1,000 free lifetime pioneer slots have been claimed.');
-
-  // 2. Duplicate email check
-  const { data: existing } = await supabase
-    .from('nexus_users').select('id').eq('email', email.trim().toLowerCase()).maybeSingle();
-  if (existing) throw new Error('This email address has already claimed an access pass.');
-
-  // 3. Validate code
-  const codeCheck = await validateReferralCode(referralCode);
-  if (!codeCheck.valid) throw new Error(codeCheck.message);
-
-  // 4. Atomically redeem code (only update 'available' rows)
-  const { count: updated } = await supabase
-    .from('nexus_referral_codes')
-    .update({ status: 'redeemed', redeemed_by: email.trim().toLowerCase(), redeemed_at: new Date().toISOString() })
-    .eq('code', referralCode.trim().toUpperCase())
-    .eq('status', 'available')
-    .select('*', { count: 'exact', head: true });
-  if (updated === 0) throw new Error('This referral code was just used. Please try another code.');
-
-  // 5. Insert user
-  const userCode = `USR-${Math.floor(1000 + Math.random() * 9000)}`;
-  const { data, error } = await supabase.from('nexus_users').insert({
-    user_code:    userCode,
-    name:         name.trim(),
-    email:        email.trim().toLowerCase(),
-    age:          parseInt(age, 10),
+  const newUser = {
+    id: newId,
+    name: name.trim(),
+    email: email.trim(),
+    age: parseInt(age, 10),
     profession,
-    referral_code: referralCode.trim().toUpperCase(),
-    lat:          location?.latitude    ?? null,
-    lng:          location?.longitude   ?? null,
-    accuracy_m:   location?.accuracy   ?? null,
-    city:         location?.city        ?? null,
-    region:       location?.region      ?? null,
-    country:      location?.country     ?? null,
-    country_code: location?.countryCode ?? null,
-    suburb:       location?.suburb      ?? null,
-    postal_code:  location?.postalCode  ?? null,
-    geo_source:   location?.source      ?? null,
-  }).select().single();
+    referralCode: referralCode.trim().toUpperCase(),
+    location: {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy || 5,
+      city: location.city || 'Undisclosed',
+      region: location.region || '',
+      country: location.country || 'Global'
+    },
+    registeredAt: new Date().toISOString()
+  };
 
-  if (error) throw new Error(error.message || 'Registration failed. Please try again.');
-  dispatchUpdate();
-  return mapUser(data);
+  // Mark referral code as redeemed
+  const updatedCodes = codes.map(c => {
+    if (c.code.toUpperCase() === referralCode.trim().toUpperCase()) {
+      return {
+        ...c,
+        status: 'redeemed',
+        redeemedBy: email.trim(),
+        redeemedAt: new Date().toISOString()
+      };
+    }
+    return c;
+  });
+
+  const updatedUsers = [newUser, ...users];
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+  localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(updatedCodes));
+
+  // If manualRemaining override was active, decrement it by 1
+  try {
+    const quotaSettings = getQuotaSettings();
+    if (quotaSettings.manualRemaining !== null && quotaSettings.manualRemaining !== undefined && quotaSettings.manualRemaining > 0) {
+      quotaSettings.manualRemaining = Math.max(0, quotaSettings.manualRemaining - 1);
+      localStorage.setItem(STORAGE_KEYS.QUOTA, JSON.stringify(quotaSettings));
+    }
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexus_slots_updated', { detail: { remaining: getRemainingSlots() } }));
+  }
+
+  return newUser;
 };
 
-// ─── Geographic Insights ──────────────────────────────────────────────────────
+export const generateReferralCodes = (count = 5, prefix = 'NEXUS') => {
+  const codes = getStoredReferralCodes();
+  const newCodes = [];
+  const cleanPrefix = (prefix || 'NEXUS').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-export const getGeographicInsights = async () => {
-  const [users, remaining] = await Promise.all([getStoredUsers(), getRemainingSlots()]);
-  if (users.length === 0) return { totalUsers: 0, remainingSlots: remaining, rankedCities: [], countryBreakdown: {}, topCandidate: null };
+  for (let i = 0; i < count; i++) {
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const codeStr = `${cleanPrefix}-${randomHex}-${Math.floor(100 + Math.random() * 900)}`;
+    newCodes.push({
+      code: codeStr,
+      status: 'available',
+      createdAt: new Date().toISOString().split('T')[0],
+      redeemedBy: null,
+      tags: ['Admin-Generated']
+    });
+  }
+
+  const merged = [...newCodes, ...codes];
+  localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(merged));
+  return merged;
+};
+
+export const deleteReferralCode = (codeToDelete) => {
+  const codes = getStoredReferralCodes();
+  const filtered = codes.filter(c => c.code !== codeToDelete);
+  localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(filtered));
+  return filtered;
+};
+
+export const getGeographicInsights = () => {
+  const users = getStoredUsers();
+  
+  if (users.length === 0) {
+    return {
+      totalUsers: 0,
+      remainingSlots: getRemainingSlots(),
+      rankedCities: [],
+      countryBreakdown: {},
+      topCandidate: null
+    };
+  }
 
   const cityMap = {};
   const countryMap = {};
-  users.forEach((u) => {
-    const city    = u.location.city    || 'Unknown';
-    const country = u.location.country || 'Unknown';
-    const key     = `${city}|${country}`;
-    cityMap[key] = cityMap[key] || { city, country, count: 0, totalAccuracy: 0 };
-    cityMap[key].count++;
-    cityMap[key].totalAccuracy += (u.location.accuracy ?? 999);
-    countryMap[country] = (countryMap[country] || 0) + 1;
+
+  users.forEach(u => {
+    const cityKey = `${u.location.city}, ${u.location.country}`;
+    const countryKey = u.location.country;
+
+    cityMap[cityKey] = cityMap[cityKey] || {
+      city: u.location.city,
+      country: u.location.country,
+      count: 0,
+      coordinates: [u.location.latitude, u.location.longitude],
+      avgAccuracy: 0,
+      totalAccuracy: 0,
+      users: []
+    };
+
+    cityMap[cityKey].count += 1;
+    cityMap[cityKey].totalAccuracy += (u.location.accuracy || 10);
+    cityMap[cityKey].users.push(u);
+
+    countryMap[countryKey] = (countryMap[countryKey] || 0) + 1;
   });
 
-  const rankedCities = Object.values(cityMap).map((c) => ({
+  const rankedCities = Object.values(cityMap).map(c => ({
     ...c,
-    avgAccuracy:  Math.round((c.totalAccuracy / c.count) * 10) / 10,
-    percentage:   Math.round((c.count / users.length) * 1000) / 10,
+    avgAccuracy: Math.round((c.totalAccuracy / c.count) * 10) / 10,
+    percentage: Math.round((c.count / users.length) * 1000) / 10
   })).sort((a, b) => b.count - a.count);
 
-  return { totalUsers: users.length, remainingSlots: remaining, rankedCities, countryBreakdown: countryMap, topCandidate: rankedCities[0] || null };
+  const topCandidate = rankedCities[0] || null;
+
+  return {
+    totalUsers: users.length,
+    remainingSlots: getRemainingSlots(),
+    rankedCities,
+    countryBreakdown: countryMap,
+    topCandidate
+  };
 };
 
-// ─── Reset (admin only) ───────────────────────────────────────────────────────
-
-export const resetStoreToEmpty = async () => {
-  await supabase.from('nexus_users').delete().not('id', 'is', null);
-  await supabase.from('nexus_referral_codes').delete().not('id', 'is', null);
-  await supabase.from('nexus_referral_codes').insert(SEED_CODES);
-  await supabase.from('nexus_quota').upsert({ id: 1, total_quota: TOTAL_FREE_QUOTA, manual_remaining: null });
-  dispatchUpdate();
+export const resetStoreToMockData = () => {
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.CODES, JSON.stringify(INITIAL_REFERRAL_CODES));
+  return { users: [], codes: INITIAL_REFERRAL_CODES };
 };
 
-// ─── Admin auth (localStorage session only) ───────────────────────────────────
+// Admin authentication helpers
+export const checkAdminAuth = () => {
+  return localStorage.getItem(STORAGE_KEYS.ADMIN_AUTH) === 'authenticated_true';
+};
 
-export const checkAdminAuth = () => localStorage.getItem(ADMIN_AUTH_KEY) === 'ok';
-
-export const loginAdmin = (email, password) => {
-  const E = (import.meta.env.VITE_ADMIN_EMAIL    || 'metheadminlover@gmail.com').toLowerCase().trim();
-  const P =  import.meta.env.VITE_ADMIN_PASSWORD || 'bharanihema@2007';
-  if (email.trim().toLowerCase() === E && password === P) {
-    localStorage.setItem(ADMIN_AUTH_KEY, 'ok');
+export const loginAdmin = (usernameOrEmail, password) => {
+  const userClean = (usernameOrEmail || '').trim().toLowerCase();
+  if (userClean === 'metheadminlover@gmail.com' && password === 'bharanihema@2007') {
+    localStorage.setItem(STORAGE_KEYS.ADMIN_AUTH, 'authenticated_true');
     return { success: true };
   }
-  return { success: false, message: 'Invalid email or password.' };
+  return { success: false, message: 'Invalid administrator email or password.' };
 };
 
-export const logoutAdmin = () => localStorage.removeItem(ADMIN_AUTH_KEY);
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const dispatchUpdate = () => {
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nexus_slots_updated'));
+export const logoutAdmin = () => {
+  localStorage.removeItem(STORAGE_KEYS.ADMIN_AUTH);
 };
