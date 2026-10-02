@@ -116,7 +116,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
     // If denied and no manual city chosen, prompt for it
     if (locationStatus === 'denied' && !manualCity) {
-      return setValidationError('Please select your city so we can confirm your region.');
+      return setValidationError('Location data is needed to ensure the offer is not misused. Please select your nearest city.');
     }
 
     setIsSubmitting(true);

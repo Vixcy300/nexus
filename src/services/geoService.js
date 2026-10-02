@@ -17,16 +17,19 @@
 
 export const PRESET_LOCATIONS = [
   { city: 'London',    region: 'Greater London',  country: 'United Kingdom', countryCode: 'GB', latitude: 51.5074, longitude: -0.1278,  accuracy: 999 },
+  { city: 'New York',  region: 'New York',         country: 'United States',  countryCode: 'US', latitude: 40.7128, longitude: -74.0060, accuracy: 999 },
+  { city: 'Chennai',   region: 'Tamil Nadu',       country: 'India',          countryCode: 'IN', latitude: 13.0827, longitude:  80.2707, accuracy: 999 },
   { city: 'Bangalore', region: 'Karnataka',        country: 'India',          countryCode: 'IN', latitude: 12.9716, longitude:  77.5946, accuracy: 999 },
   { city: 'Mumbai',    region: 'Maharashtra',      country: 'India',          countryCode: 'IN', latitude: 19.0760, longitude:  72.8777, accuracy: 999 },
   { city: 'New Delhi', region: 'Delhi',            country: 'India',          countryCode: 'IN', latitude: 28.6139, longitude:  77.2090, accuracy: 999 },
-  { city: 'New York',  region: 'New York',         country: 'United States',  countryCode: 'US', latitude: 40.7128, longitude: -74.0060, accuracy: 999 },
   { city: 'Dubai',     region: 'Dubai',            country: 'UAE',            countryCode: 'AE', latitude: 25.2048, longitude:  55.2708, accuracy: 999 },
   { city: 'Singapore', region: 'Central',          country: 'Singapore',      countryCode: 'SG', latitude:  1.3521, longitude: 103.8198, accuracy: 999 },
   { city: 'Berlin',    region: 'Berlin',           country: 'Germany',        countryCode: 'DE', latitude: 52.5200, longitude:  13.4050, accuracy: 999 },
   { city: 'Paris',     region: 'Île-de-France',    country: 'France',         countryCode: 'FR', latitude: 48.8566, longitude:   2.3522, accuracy: 999 },
   { city: 'Tokyo',     region: 'Kanto',            country: 'Japan',          countryCode: 'JP', latitude: 35.6762, longitude: 139.6503, accuracy: 999 },
   { city: 'Sydney',    region: 'New South Wales',  country: 'Australia',      countryCode: 'AU', latitude: -33.865, longitude: 151.2094, accuracy: 999 },
+  { city: 'Los Angeles', region: 'California',     country: 'United States',  countryCode: 'US', latitude: 34.0522, longitude:-118.2437, accuracy: 999 },
+  { city: 'São Paulo', region: 'São Paulo',        country: 'Brazil',         countryCode: 'BR', latitude:-23.5505, longitude: -46.6333, accuracy: 999 },
 ];
 
 // ─── Error class ──────────────────────────────────────────────────────────────
