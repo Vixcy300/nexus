@@ -33,6 +33,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   // Location state (queried in background on open and verified before submit)
   const [locationStatus, setLocationStatus] = useState('idle'); // 'idle' | 'acquiring' | 'ok' | 'denied' | 'failed'
+  const [isLocating, setIsLocating] = useState(false);
   const locationRef = useRef(null);
   const locationPromiseRef = useRef(null);
   const abortRef = useRef(null);
@@ -47,13 +48,39 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   const [submitPhase, setSubmitPhase] = useState('');
   const [registeredUser, setRegisteredUser] = useState(null);
 
-  // Load real slot count on open and start background location collection
+  // Load real slot count on open and initiate background location verification
   useEffect(() => {
     if (!isOpen) return;
     getRemainingSlots().then(setRemainingSlots).catch(() => {});
-    // Silently initiate background location verification
+    
+    // Background location verification
     requestLocationFix().catch(() => {});
   }, [isOpen]);
+
+  // Listen to browser permission state changes (e.g. user taps lock icon in address bar and sets Allow)
+  useEffect(() => {
+    if (!('permissions' in navigator) || !navigator.permissions?.query) return;
+    let permObj;
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((status) => {
+        permObj = status;
+        const onPermChange = () => {
+          if (status.state === 'granted') {
+            locationPromiseRef.current = null;
+            requestLocationFix().catch(() => {});
+          } else if (status.state === 'denied') {
+            setLocationStatus('denied');
+          }
+        };
+        status.addEventListener('change', onPermChange);
+      })
+      .catch(() => {});
+
+    return () => {
+      permObj?.removeEventListener('change', onPermChange);
+    };
+  }, []);
 
   // Debounced async referral code validation
   useEffect(() => {
@@ -72,11 +99,11 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   // Esc key handler
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && isOpen && !isSubmitting) resetForm();
+      if (e.key === 'Escape' && isOpen && !isSubmitting && !isLocating) resetForm();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, isSubmitting]);
+  }, [isOpen, isSubmitting, isLocating]);
 
   // Background location request handler with promise deduplication
   const requestLocationFix = () => {
@@ -88,6 +115,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     }
 
     setLocationStatus('acquiring');
+    setIsLocating(true);
     setValidationError('');
 
     const controller = new AbortController();
@@ -97,9 +125,8 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
       try {
         const loc = await getLocation({
           signal: controller.signal,
-          targetAccuracy: 15,
-          maxWaitMs: 15000,
-          stallMs: 4000,
+          targetAccuracy: 50,
+          maxWaitMs: 12000,
         });
 
         locationRef.current = loc;
@@ -118,6 +145,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
         locationRef.current = null;
         throw err;
       } finally {
+        setIsLocating(false);
         locationPromiseRef.current = null;
       }
     })();
@@ -126,8 +154,31 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     return promise;
   };
 
-  const handleSubmit = async (e) => {
+  const handlePrimaryAction = async (e) => {
     e.preventDefault();
+    setValidationError('');
+
+    // If location is not yet verified or missing coordinates, clicking this button triggers the browser location request!
+    if (locationStatus !== 'ok' || !locationRef.current?.latitude) {
+      locationPromiseRef.current = null;
+      try {
+        const loc = await requestLocationFix();
+        // If location is now acquired and form fields are ready, submit directly!
+        if (loc && name.trim() && email.trim() && age && referralCode.trim()) {
+          handleSubmit(e, loc);
+        }
+      } catch (err) {
+        // Handled in requestLocationFix
+      }
+      return;
+    }
+
+    // Location is verified, proceed with normal form submit
+    handleSubmit(e);
+  };
+
+  const handleSubmit = async (e, forcedLoc = null) => {
+    if (e && e.preventDefault) e.preventDefault();
     setValidationError('');
 
     if (!name.trim()) return setValidationError('Please enter your full name.');
@@ -153,17 +204,18 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     }
 
     // 2. Strict location verification: Must have valid coordinates
-    let loc = locationRef.current;
+    let loc = forcedLoc || locationRef.current;
     if (!loc || loc.latitude == null || loc.longitude == null) {
       setSubmitPhase('locating');
       try {
+        locationPromiseRef.current = null;
         loc = await requestLocationFix();
       } catch (err) {
         setIsSubmitting(false);
         setSubmitPhase('');
         if (err instanceof GeoError && err.code === 'DENIED') {
           setValidationError(
-            'Location access is required to claim your Free Pioneer Pass. Please allow location permissions in your browser.'
+            'Location access is required. Mandatory GPS verification ensures fair distribution. Please allow location permissions in your browser.'
           );
         } else {
           setValidationError(
@@ -178,7 +230,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     if (!loc || loc.latitude == null || loc.longitude == null) {
       setIsSubmitting(false);
       setSubmitPhase('');
-      setValidationError('Verified location is required. Please grant location access to submit.');
+      setValidationError('Verified location is required. Mandatory GPS verification ensures fair distribution.');
       return;
     }
 
@@ -233,6 +285,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     abortRef.current?.abort();
     locationPromiseRef.current = null;
     locationRef.current = null;
+    setIsLocating(false);
     setRegisteredUser(null);
     setName('');
     setEmail('');
@@ -248,7 +301,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   const btnLabel = () => {
     if (submitPhase === 'validating') return 'Checking referral code…';
-    if (submitPhase === 'locating' || locationStatus === 'acquiring') return 'Verifying location…';
+    if (submitPhase === 'locating' || isLocating || locationStatus === 'acquiring') return 'Verifying location…';
     if (submitPhase === 'saving') return 'Securing your Pioneer Pass…';
     if (locationStatus === 'denied' || locationStatus === 'failed') return 'Allow Location to Submit';
     return 'Claim Free Pioneer Pass →';
@@ -401,7 +454,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Maya Lin"
-                    className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
+                    className="w-full bg-ink-950 border border-white/10 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white text-base sm:text-sm focus:outline-none focus:border-signal transition-colors"
                   />
                 </div>
 
@@ -416,12 +469,12 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="e.g. architect@studio.com"
-                    className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
+                    className="w-full bg-ink-950 border border-white/10 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white text-base sm:text-sm focus:outline-none focus:border-signal transition-colors"
                   />
                 </div>
 
                 {/* Age & Profession */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                   <div>
                     <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
                       <Calendar size={12} className="text-signal" /> Age *
@@ -435,7 +488,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                       value={age}
                       onChange={(e) => setAge(e.target.value)}
                       placeholder="28"
-                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors font-mono"
+                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white text-base sm:text-sm focus:outline-none focus:border-signal transition-colors font-mono"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -445,7 +498,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                     <select
                       value={profession}
                       onChange={(e) => setProfession(e.target.value)}
-                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
+                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white text-base sm:text-sm focus:outline-none focus:border-signal transition-colors"
                     >
                       {PROFESSIONS.map((p) => (
                         <option key={p} value={p} className="bg-ink-900">
@@ -457,7 +510,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                 </div>
 
                 {/* Referral Code */}
-                <div className="bg-ink-950/80 border border-white/10 rounded-2xl p-4">
+                <div className="bg-ink-950/80 border border-white/10 rounded-2xl p-3.5 sm:p-4">
                   <label className="font-mono text-xs text-white flex items-center gap-1.5 font-bold mb-1.5">
                     <Key size={12} className="text-signal" /> Referral Code (Required) *
                   </label>
@@ -467,7 +520,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                     value={referralCode}
                     onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
                     placeholder="Enter your referral code"
-                    className="w-full bg-ink-900 border border-white/15 rounded-xl px-4 py-3 text-white font-mono text-sm tracking-wider focus:outline-none focus:border-signal transition-colors"
+                    className="w-full bg-ink-900 border border-white/15 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-white font-mono text-base sm:text-sm tracking-wider focus:outline-none focus:border-signal transition-colors"
                   />
                   {codeStatus && (
                     <div
@@ -497,40 +550,66 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                 )}
 
                 {(locationStatus === 'denied' || locationStatus === 'failed') && (
-                  <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-3.5 sm:p-4 text-xs font-mono space-y-2.5 text-red-400">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle size={15} className="shrink-0 text-red-400" />
-                        <span className="font-semibold text-white">Location access required</span>
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-xs font-mono space-y-3 text-red-400">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <AlertCircle size={18} className="shrink-0 text-red-400 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-white text-sm">Location access required</div>
+                          <div className="text-[11px] text-amber-300 font-medium mt-0.5">
+                            Mandatory GPS verification ensures fair distribution.
+                          </div>
+                        </div>
                       </div>
                       <button
                         type="button"
+                        disabled={isLocating}
                         onClick={() => {
                           locationPromiseRef.current = null;
                           requestLocationFix().catch(() => {});
                         }}
-                        className="px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-white font-bold transition-colors shrink-0"
+                        className="px-3.5 py-1.5 rounded-xl bg-signal text-ink-950 font-bold hover:bg-signal-dim transition-all text-xs shrink-0 flex items-center gap-1.5 shadow-md shadow-signal/20 disabled:opacity-60"
                       >
-                        Enable Location
+                        {isLocating ? <Loader2 size={13} className="animate-spin" /> : <Navigation size={13} className="rotate-45" />}
+                        <span>{isLocating ? 'Verifying…' : 'Enable Location'}</span>
                       </button>
                     </div>
-                    <p className="text-[11px] text-mist-700 leading-relaxed">
-                      Location permission is turned off or blocked in your browser. Please allow location access to submit your registration.
+
+                    <p className="text-[11px] text-mist-500 leading-relaxed font-sans">
+                      Mandatory GPS verification ensures fair distribution of the 1,000 Free Pioneer Passes. Location access is currently disabled or blocked in your browser.
                     </p>
+
+                    {/* Step-by-step browser unblock guide */}
+                    <div className="bg-ink-950/70 border border-white/10 rounded-xl p-3 text-[11px] text-mist-300 space-y-1.5 font-sans">
+                      <div className="font-bold text-white flex items-center gap-1.5">
+                        <Navigation size={12} className="text-signal" />
+                        <span>How to allow in your browser:</span>
+                      </div>
+                      <p className="leading-snug">
+                        1. Tap the lock or site settings icon <span className="text-white font-bold">🔒</span> next to the URL in your browser address bar above.
+                      </p>
+                      <p className="leading-snug">
+                        2. Set <span className="text-white font-bold">Location</span> to <span className="text-emerald-400 font-bold">Allow</span>.
+                      </p>
+                      <p className="leading-snug">
+                        3. Tap <span className="text-signal font-bold">Enable Location</span> button above to re-verify.
+                      </p>
+                    </div>
                   </div>
                 )}
 
-                {/* Submit Button */}
+                {/* Primary Action Button */}
                 <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed"
+                  type={locationStatus === 'ok' && locationRef.current?.latitude ? 'submit' : 'button'}
+                  onClick={handlePrimaryAction}
+                  disabled={isSubmitting || isLocating}
+                  className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-3.5 sm:py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                  {isSubmitting || isLocating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
                   <span>{btnLabel()}</span>
                 </button>
 
-                <p className="text-center font-mono text-[10px] text-mist-900 leading-snug">
+                <p className="text-center font-mono text-[10px] sm:text-[11px] text-mist-900 leading-snug">
                   🔒 Strictly limited to 1,000 passes. One claim per verified creator.
                 </p>
               </form>

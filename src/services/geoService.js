@@ -65,9 +65,8 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
  * @returns {Promise<{ latitude: number, longitude: number, accuracy: number, timestamp: number }>}
  */
 export function getBestPosition({
-  targetAccuracy = 15,
-  maxWaitMs = 15000,
-  stallMs = 4000,
+  targetAccuracy = 50,
+  maxWaitMs = 12000,
   signal,
 } = {}) {
   return new Promise((resolve, reject) => {
@@ -78,69 +77,78 @@ export function getBestPosition({
       return reject(new GeoError('ABORTED', 'Location request was cancelled.'));
     }
 
-    let best = null;
-    let done = false;
-    let watchId;
-    let stallTimer;
-    let deadline;
+    let settled = false;
+    let fallbackTimer = null;
 
     const cleanup = () => {
-      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
-      clearTimeout(stallTimer);
-      clearTimeout(deadline);
+      clearTimeout(fallbackTimer);
       signal?.removeEventListener('abort', onAbort);
     };
 
     const settle = (fn, value) => {
-      if (done) return;
-      done = true;
+      if (settled) return;
+      settled = true;
       cleanup();
       fn(value);
     };
 
-    const finish = () =>
-      best
-        ? settle(resolve, best)
-        : settle(reject, new GeoError('TIMEOUT', 'Could not obtain a location fix within the time limit.'));
-
     const onAbort = () => settle(reject, new GeoError('ABORTED', 'Location request was cancelled.'));
     signal?.addEventListener('abort', onAbort, { once: true });
 
-    deadline = setTimeout(finish, maxWaitMs);
+    // Step 1: Request position via standard browser prompt.
+    // Try high accuracy first (e.g. GPS on mobile devices).
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          settle(resolve, {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: Math.round((pos.coords.accuracy || 15) * 10) / 10,
+            timestamp: pos.timestamp,
+          });
+        },
+        (err) => {
+          // If explicitly denied by the user or browser site settings, reject immediately
+          if (err.code === err.PERMISSION_DENIED) {
+            return settle(reject, new GeoError('DENIED', 'Location permission was denied.'));
+          }
 
-    watchId = navigator.geolocation.watchPosition(
-      ({ coords, timestamp }) => {
-        if (!best || coords.accuracy < best.accuracy) {
-          best = {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            accuracy: Math.round(coords.accuracy * 10) / 10,
-            timestamp,
-          };
-          // Reset stall timer on every improvement
-          clearTimeout(stallTimer);
-          stallTimer = setTimeout(finish, stallMs);
-        }
-        // Early exit if we hit the high-accuracy GPS target
-        if (best.accuracy <= targetAccuracy) finish();
-      },
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
-          settle(reject, new GeoError('DENIED', 'Location permission was denied.'));
-        } else if (best) {
-          finish();
-        } else {
-          settle(
-            reject,
-            new GeoError(
-              err.code === err.TIMEOUT ? 'TIMEOUT' : 'UNAVAILABLE',
-              err.message || 'Location unavailable.'
-            )
-          );
-        }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+          // If high accuracy timed out or failed (e.g. desktop PCs without GPS chips),
+          // fallback immediately to standard accuracy (Wi-Fi/network triangulation)
+          try {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                settle(resolve, {
+                  latitude: pos.coords.latitude,
+                  longitude: pos.coords.longitude,
+                  accuracy: Math.round((pos.coords.accuracy || 50) * 10) / 10,
+                  timestamp: pos.timestamp,
+                });
+              },
+              (err2) => {
+                if (err2.code === err2.PERMISSION_DENIED) {
+                  settle(reject, new GeoError('DENIED', 'Location permission was denied.'));
+                } else {
+                  settle(
+                    reject,
+                    new GeoError(
+                      err2.code === err2.TIMEOUT ? 'TIMEOUT' : 'UNAVAILABLE',
+                      err2.message || 'Location unavailable.'
+                    )
+                  );
+                }
+              },
+              { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+            );
+          } catch (callErr2) {
+            settle(reject, new GeoError('UNAVAILABLE', callErr2.message || 'Location request failed.'));
+          }
+        },
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+      );
+    } catch (callErr) {
+      settle(reject, new GeoError('UNAVAILABLE', callErr.message || 'Location request failed.'));
+    }
   });
 }
 
