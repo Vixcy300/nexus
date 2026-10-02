@@ -142,25 +142,6 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
       if (onUserRegistered) onUserRegistered(user);
       // Update remaining slots
       getRemainingSlots().then(setRemainingSlots).catch(() => {});
-
-      // Send confirmation email via Google SMTP
-      try {
-        fetch('/api/send-confirmation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            profession: user.profession,
-            referralCode: user.referralCode,
-            location: user.location,
-          }),
-        }).catch((e) => console.warn('Email background send:', e));
-      } catch (e) {
-        console.warn('Email trigger error:', e);
-      }
-
       try { confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } }); } catch {}
     } catch (err) {
       setValidationError(err.message || 'Registration failed. Please try again.');
