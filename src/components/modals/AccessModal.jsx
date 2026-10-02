@@ -154,6 +154,27 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
       // Update remaining slots
       getRemainingSlots().then(setRemainingSlots).catch(() => {});
       try { confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } }); } catch {}
+
+      // Asynchronously dispatch Google SMTP confirmation pass
+      fetch('/api/send-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: user.name,
+          email: user.email,
+          id: user.id,
+          profession: user.profession,
+          referralCode: user.referralCode,
+          location: user.location,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          console.log('[NEXUS] Confirmation email dispatched:', data);
+        })
+        .catch((mailErr) => {
+          console.warn('[NEXUS] Email dispatch error:', mailErr);
+        });
     } catch (err) {
       setValidationError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -234,18 +255,22 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                 <p className="font-body text-xs sm:text-sm text-mist-900 max-w-sm mx-auto mb-5">
                   You are officially Pioneer Member <span className="font-mono text-white font-bold">#{registeredUser.id}</span>.
                 </p>
-                <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 max-w-sm mx-auto text-left font-mono text-[11px] space-y-2 mb-6">
+                <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 max-w-sm mx-auto text-left font-mono text-[11px] space-y-2 mb-4">
                   {[
                     ['Email',    registeredUser.email],
                     ['Role',     registeredUser.profession],
                     ['Referral', registeredUser.referralCode],
-                    ['Region',   [registeredUser.location.city, registeredUser.location.country].filter(Boolean).join(', ') || '—'],
+                    ['Region',   [registeredUser.location?.city, registeredUser.location?.country].filter(Boolean).join(', ') || 'Global Network'],
                   ].map(([l, v]) => (
                     <div key={l} className="flex justify-between gap-2 border-b border-white/5 pb-2 last:border-0 last:pb-0">
                       <span className="text-mist-900 shrink-0">{l}:</span>
                       <span className="text-white text-right break-all">{v}</span>
                     </div>
                   ))}
+                </div>
+                <div className="flex items-center justify-center gap-1.5 text-xs text-signal font-mono mb-6 bg-signal/10 border border-signal/20 rounded-xl py-2 px-3 max-w-sm mx-auto">
+                  <Mail size={13} className="shrink-0" />
+                  <span className="truncate">Confirmation pass sent to {registeredUser.email}</span>
                 </div>
                 <div className="flex flex-col gap-3">
                   <button onClick={() => alert('Downloading NEXUS Architectural Suite…')}

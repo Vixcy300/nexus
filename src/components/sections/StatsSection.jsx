@@ -3,7 +3,7 @@ import ScrollReveal from '../ui/ScrollReveal'
 
 export default function StatsSection() {
   const stats = [
-    { num: 1000, label: 'Pioneer Free Quota', suffix: ' Passes' },
+    { num: 1000, label: 'Pioneer Free Passes', suffix: '+' },
     { num: 4500, label: 'Parametric Revit Families', suffix: '+' },
     { num: 12500, label: 'AutoCAD Dynamic Blocks', suffix: '+' },
     { num: 250, label: 'Calibrated AI Prompts', suffix: '+' },
@@ -12,12 +12,12 @@ export default function StatsSection() {
   ]
 
   return (
-    <section className="bg-signal py-24 md:py-32 w-full text-ink-950 relative z-10">
-      <div className="max-w-7xl mx-auto px-6 md:px-12">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-12 md:gap-y-20 whitespace-nowrap">
+    <section className="bg-signal py-16 sm:py-24 md:py-32 w-full text-ink-950 relative z-10 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-8 md:gap-x-12 gap-y-8 sm:gap-y-12 md:gap-y-16">
           {stats.map((stat, i) => (
-            <ScrollReveal key={i} delay={i * 0.1} className="flex flex-col items-start xl:items-center">
-              <div className="font-display text-6xl md:text-8xl font-bold tracking-tighter tabular-nums">
+            <ScrollReveal key={i} delay={i * 0.1} className="flex flex-col items-start xl:items-center min-w-0">
+              <div className="font-display text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold tracking-tight tabular-nums leading-none">
                 <AnimatedCounter 
                   end={stat.num} 
                   prefix={stat.prefix} 
@@ -25,7 +25,7 @@ export default function StatsSection() {
                   decimals={stat.decimals} 
                 />
               </div>
-              <p className="font-mono text-xs md:text-sm uppercase tracking-widest mt-2 md:mt-4 opacity-80 font-semibold text-wrap">
+              <p className="font-mono text-[10px] xs:text-xs sm:text-sm uppercase tracking-wider md:tracking-widest mt-2 sm:mt-3 md:mt-4 opacity-80 font-semibold break-words leading-snug">
                 {stat.label}
               </p>
             </ScrollReveal>

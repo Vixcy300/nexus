@@ -40,8 +40,7 @@ export default function CTASection({ onOpenAccessModal, remainingSlots = 988 }) 
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, delay: 0.1 }}
-          className="font-display text-7xl md:text-[8rem] lg:text-[10rem] tracking-tighter leading-[0.85] mb-12 flex flex-col"
-          data-cursor="hover"
+          className="font-display text-4xl sm:text-6xl md:text-8xl lg:text-[10rem] tracking-tighter leading-[0.9] mb-8 sm:mb-12 flex flex-col"
         >
           <span className="text-white">Design tomorrow.</span>
           <span className="text-stroke-signal text-signal">Build today.</span>

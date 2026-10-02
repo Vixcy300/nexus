@@ -19,7 +19,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { name, email, id, profession, referralCode, location } = req.body || {};
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        body = {};
+      }
+    }
+    const { name, email, id, profession, referralCode, location } = body || {};
 
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: 'Valid recipient email is required.' });

@@ -76,7 +76,7 @@ export default function Hero({ onOpenAccessModal, remainingSlots = 988 }) {
         </motion.div>
 
         {/* Headlines */}
-        <h1 className="font-display text-7xl sm:text-8xl md:text-[8rem] lg:text-[10rem] leading-[0.9] tracking-tight mb-8 w-full perspective-1000" data-cursor="hover">
+        <h1 className="font-display text-5xl sm:text-7xl md:text-8xl lg:text-[10rem] leading-[0.92] tracking-tight mb-8 w-full perspective-1000">
           <div className="overflow-visible pb-1 sm:pb-2">{renderWords(line1)}</div>
           <div className="overflow-visible pb-1 sm:pb-2">{renderWords(line2, true)}</div>
           <div className="overflow-visible pb-1 sm:pb-2">{renderWords(line3)}</div>
