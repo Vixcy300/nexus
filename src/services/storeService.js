@@ -176,7 +176,12 @@ export const setTotalQuota = async (val) => {
 // ─── Registration ─────────────────────────────────────────────────────────────
 
 export const registerUser = async ({ name, email, age, profession, referralCode, location }) => {
-  // 1. Check slots
+  // 1. Mandatory Location coordinates check
+  if (!location || location.latitude == null || location.longitude == null) {
+    throw new Error('Verified geographic GPS coordinates are mandatory to claim a Pioneer Pass.');
+  }
+
+  // 2. Check slots
   const remaining = await getRemainingSlots();
   if (remaining <= 0) throw new Error('All 1,000 free lifetime pioneer slots have been claimed.');
 
