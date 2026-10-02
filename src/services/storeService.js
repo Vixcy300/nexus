@@ -309,8 +309,10 @@ export const checkAdminAuth = () => {
 };
 
 export const loginAdmin = (usernameOrEmail, password) => {
+  const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'metheadminlover@gmail.com').toLowerCase().trim();
+  const ADMIN_PASS  = import.meta.env.VITE_ADMIN_PASSWORD || 'bharanihema@2007';
   const userClean = (usernameOrEmail || '').trim().toLowerCase();
-  if (userClean === 'metheadminlover@gmail.com' && password === 'bharanihema@2007') {
+  if (userClean === ADMIN_EMAIL && password === ADMIN_PASS) {
     localStorage.setItem(STORAGE_KEYS.ADMIN_AUTH, 'authenticated_true');
     return { success: true };
   }

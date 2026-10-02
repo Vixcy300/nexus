@@ -8,8 +8,11 @@
     --cursor-y: 0px;
   }
 
-  * {
-    cursor: none !important;
+  /* Hide native cursor only on desktop/mouse devices — mobile stays normal */
+  @media (pointer: fine) {
+    * {
+      cursor: none !important;
+    }
   }
 
   html {

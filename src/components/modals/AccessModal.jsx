@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, Sparkles, CheckCircle2, 
-  AlertCircle, Key, User, Mail, Calendar, Briefcase, Download
+import {
+  X, Sparkles, CheckCircle2,
+  AlertCircle, Key, User, Mail, Calendar, Briefcase, Download, Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { 
-  registerUser, 
-  validateReferralCode, 
-  getStoredUsers, 
-  TOTAL_FREE_QUOTA 
+import {
+  registerUser,
+  validateReferralCode,
+  getStoredUsers,
+  TOTAL_FREE_QUOTA
 } from '../../services/storeService';
 import { getHighAccuracyLocation, PRESET_LOCATIONS } from '../../services/geoService';
 
@@ -22,7 +22,7 @@ const PROFESSIONS = [
   'MEP Engineer (HVAC/Plumbing/Elec)',
   'Computational Designer / Parametric Lead',
   'Studio Principal / Founder',
-  'Interior Architect / Designer'
+  'Interior Architect / Designer',
 ];
 
 export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
@@ -31,115 +31,111 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   const [age, setAge] = useState('');
   const [profession, setProfession] = useState(PROFESSIONS[1]);
   const [referralCode, setReferralCode] = useState('');
-  
-  // Geolocation state (silent background acquisition)
+
+  // Location state
   const [locationData, setLocationData] = useState(null);
+  const [isLocating, setIsLocating] = useState(false); // actively acquiring
+  const locationRef = useRef(null); // keep ref for submit time
 
   // Submission & Validation states
   const [validationError, setValidationError] = useState('');
-  const [codeStatus, setCodeStatus] = useState(null); // { valid: bool, message: str }
+  const [codeStatus, setCodeStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState(''); // 'locating' | 'saving' | ''
   const [registeredUser, setRegisteredUser] = useState(null);
 
   const usersCount = getStoredUsers().length;
   const remainingSlots = Math.max(0, TOTAL_FREE_QUOTA - usersCount);
 
-  // Check referral code in real-time when 6+ chars typed
+  // Validate referral code on type
   useEffect(() => {
     if (referralCode.trim().length >= 6) {
-      const res = validateReferralCode(referralCode);
-      setCodeStatus(res);
+      setCodeStatus(validateReferralCode(referralCode));
     } else {
       setCodeStatus(null);
     }
   }, [referralCode]);
 
-  // Silently acquire location in background on open
+  // Start silently capturing location as soon as modal opens
   useEffect(() => {
-    if (isOpen && !locationData) {
-      handleAcquireLocation();
+    if (isOpen) {
+      setIsLocating(true);
+      getHighAccuracyLocation()
+        .then((data) => {
+          setLocationData(data);
+          locationRef.current = data;
+        })
+        .catch(() => {
+          setLocationData(PRESET_LOCATIONS[0]);
+          locationRef.current = PRESET_LOCATIONS[0];
+        })
+        .finally(() => setIsLocating(false));
     }
   }, [isOpen]);
 
+  // Esc key
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        resetForm();
-      }
+      if (e.key === 'Escape' && isOpen && !isSubmitting) resetForm();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, isSubmitting]);
 
-  const handleAcquireLocation = async () => {
-    try {
-      const data = await getHighAccuracyLocation();
-      setLocationData(data);
-    } catch {
-      // Auto-fallback silently to default preset without showing any errors or prompts
-      setLocationData(PRESET_LOCATIONS[0]);
-    }
-  };
-
-  const handleApplySampleCode = () => {
-    setReferralCode('ARCH-2026-ALPHA');
-    const res = validateReferralCode('ARCH-2026-ALPHA');
-    setCodeStatus(res);
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setValidationError('');
 
-    if (!name.trim()) {
-      setValidationError('Please enter your full name.');
-      return;
-    }
-    if (!email.trim() || !email.includes('@')) {
-      setValidationError('Please enter a valid email address.');
-      return;
-    }
+    if (!name.trim()) return setValidationError('Please enter your full name.');
+    if (!email.trim() || !email.includes('@')) return setValidationError('Please enter a valid email address.');
     const ageNum = parseInt(age, 10);
-    if (!age || isNaN(ageNum) || ageNum < 16 || ageNum > 99) {
-      setValidationError('Please enter a valid age between 16 and 99.');
-      return;
-    }
-    if (!referralCode.trim()) {
-      setValidationError('Referral code is mandatory to unlock the first 1,000 free access tier.');
-      return;
-    }
+    if (!age || isNaN(ageNum) || ageNum < 16 || ageNum > 99)
+      return setValidationError('Please enter a valid age between 16 and 99.');
+    if (!referralCode.trim())
+      return setValidationError('Referral code is required to claim your free Pioneer Pass.');
+    const codeCheck = validateReferralCode(referralCode);
+    if (!codeCheck.valid) return setValidationError(codeCheck.message);
 
     setIsSubmitting(true);
 
+    // If location still being acquired, wait for it (up to 10s more)
+    if (!locationRef.current) {
+      setSubmitPhase('locating');
+      await new Promise((resolve) => {
+        const maxWait = Date.now() + 10000;
+        const poll = setInterval(() => {
+          if (locationRef.current || Date.now() > maxWait) {
+            clearInterval(poll);
+            if (!locationRef.current) locationRef.current = PRESET_LOCATIONS[0];
+            resolve();
+          }
+        }, 200);
+      });
+    }
+
+    setSubmitPhase('saving');
+
     try {
-      const finalLoc = locationData || PRESET_LOCATIONS[0];
       const user = registerUser({
         name,
         email,
         age: ageNum,
         profession,
         referralCode,
-        location: finalLoc
+        location: locationRef.current || PRESET_LOCATIONS[0],
       });
 
       setRegisteredUser(user);
       if (onUserRegistered) onUserRegistered(user);
 
-      // Trigger celebration confetti
       try {
-        confetti({
-          particleCount: 120,
-          spread: 80,
-          origin: { y: 0.6 }
-        });
-      } catch {
-        // no-op if confetti blocked
-      }
-
+        confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
+      } catch {}
     } catch (err) {
       setValidationError(err.message || 'Registration failed. Please check your details.');
     } finally {
       setIsSubmitting(false);
+      setSubmitPhase('');
     }
   };
 
@@ -150,164 +146,163 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     setAge('');
     setReferralCode('');
     setValidationError('');
+    setCodeStatus(null);
     onClose();
   };
 
   if (!isOpen) return null;
 
+  const submitLabel = () => {
+    if (submitPhase === 'locating') return 'Verifying location…';
+    if (submitPhase === 'saving') return 'Securing your Pioneer Pass…';
+    if (isSubmitting) return 'Processing…';
+    return 'Claim 1 of 1,000 Free Passes';
+  };
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+      {/* Full-screen overlay */}
+      <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 overflow-hidden">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={resetForm}
-          className="fixed inset-0 bg-ink-950/90 backdrop-blur-xl"
+          onClick={() => !isSubmitting && resetForm()}
+          className="absolute inset-0 bg-ink-950/90 backdrop-blur-xl"
         />
 
-        {/* Modal Window */}
+        {/* Modal */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-full max-w-2xl bg-ink-900 border border-white/15 rounded-3xl shadow-2xl overflow-hidden z-10 my-8"
+          initial={{ opacity: 0, y: 60, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 60, scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="relative w-full sm:max-w-xl bg-ink-900 border border-white/10 sm:rounded-3xl rounded-t-3xl shadow-2xl z-10 flex flex-col max-h-[95dvh] sm:max-h-[90vh]"
         >
-          {/* Header Banner */}
-          <div className="relative bg-gradient-to-r from-ink-950 via-ink-900 to-ink-950 px-6 sm:px-8 py-6 border-b border-white/10 flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2 h-2 rounded-full bg-signal animate-ping" />
-                <span className="font-mono text-xs text-signal uppercase tracking-wider font-semibold">
+          {/* Header — sticky */}
+          <div className="shrink-0 bg-gradient-to-r from-ink-950 via-ink-900 to-ink-950 px-5 sm:px-7 py-4 sm:py-5 border-b border-white/10 flex items-start justify-between rounded-t-3xl">
+            <div className="flex-1 min-w-0 pr-3">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-signal animate-ping shrink-0" />
+                <span className="font-mono text-[10px] sm:text-xs text-signal uppercase tracking-wider font-semibold">
                   First 1,000 Early Pioneer Pass
                 </span>
-                <span className="font-mono text-[10px] bg-signal/15 text-signal px-2 py-0.5 rounded border border-signal/30">
-                  {remainingSlots} Slots Left
+                <span className="font-mono text-[10px] bg-signal/15 text-signal px-2 py-0.5 rounded border border-signal/30 shrink-0">
+                  {remainingSlots} Left
                 </span>
               </div>
-              <h3 className="font-display text-2xl sm:text-3xl font-bold text-white">
+              <h3 className="font-display text-xl sm:text-2xl font-bold text-white leading-tight">
                 Claim 100% Free Lifetime Access
               </h3>
-              <p className="font-body text-xs sm:text-sm text-mist-900 mt-1 max-w-md">
-                Full AutoCAD (.DWG) dynamic templates, Revit (.RFA) smart families, and AI prompt generation suite.
+              <p className="font-body text-[11px] sm:text-xs text-mist-900 mt-0.5 leading-snug">
+                AutoCAD templates · Revit families · AI prompt suite
               </p>
             </div>
-
             <button
-              onClick={resetForm}
-              className="p-2 rounded-full text-mist-700 hover:text-white hover:bg-white/10 transition-colors"
+              onClick={() => !isSubmitting && resetForm()}
+              className="p-1.5 rounded-full text-mist-700 hover:text-white hover:bg-white/10 transition-colors shrink-0"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
 
-          {/* Modal Body */}
-          <div className="p-6 sm:p-8 max-h-[80vh] overflow-y-auto">
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-7 py-5 sm:py-6">
             {registeredUser ? (
-              /* Success / Granted Screen */
-              <div className="text-center py-6">
-                <div className="w-16 h-16 rounded-2xl bg-signal/10 border border-signal/40 flex items-center justify-center text-signal mx-auto mb-6">
-                  <CheckCircle2 size={36} />
+              /* ── Success Screen ── */
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-2xl bg-signal/10 border border-signal/40 flex items-center justify-center text-signal mx-auto mb-4">
+                  <CheckCircle2 size={30} />
                 </div>
-
-                <span className="font-mono text-xs text-signal uppercase tracking-widest block mb-1">
+                <span className="font-mono text-[10px] text-signal uppercase tracking-widest block mb-1">
                   Access Pass Activated
                 </span>
-                <h4 className="font-display text-3xl font-bold text-white mb-2">
+                <h4 className="font-display text-2xl sm:text-3xl font-bold text-white mb-2">
                   Welcome, {registeredUser.name}!
                 </h4>
-                <p className="font-body text-sm text-mist-900 max-w-md mx-auto mb-6">
-                  Your registration has been securely recorded. You are officially Pioneer Member <span className="font-mono text-white font-bold">#{registeredUser.id}</span>.
+                <p className="font-body text-xs sm:text-sm text-mist-900 max-w-sm mx-auto mb-5">
+                  You are officially Pioneer Member{' '}
+                  <span className="font-mono text-white font-bold">#{registeredUser.id}</span>.
+                  Your access has been secured.
                 </p>
 
-                {/* Registered Summary Ticket */}
-                <div className="bg-ink-950 border border-white/10 rounded-2xl p-5 max-w-md mx-auto text-left font-mono text-xs space-y-2 mb-8">
-                  <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-mist-900">Email:</span>
-                    <span className="text-white">{registeredUser.email}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="text-mist-900">Profession:</span>
-                    <span className="text-signal">{registeredUser.profession}</span>
-                  </div>
-                  <div className="flex justify-between pt-1">
-                    <span className="text-mist-900">Referral Used:</span>
-                    <span className="text-white font-bold">{registeredUser.referralCode}</span>
-                  </div>
+                <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 max-w-sm mx-auto text-left font-mono text-[11px] space-y-2 mb-6">
+                  {[
+                    ['Email', registeredUser.email],
+                    ['Profession', registeredUser.profession],
+                    ['Referral Used', registeredUser.referralCode],
+                    ['Location', `${registeredUser.location.city}, ${registeredUser.location.country}`],
+                  ].map(([label, val]) => (
+                    <div key={label} className="flex justify-between gap-2 border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                      <span className="text-mist-900 shrink-0">{label}:</span>
+                      <span className="text-white text-right">{val}</span>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <div className="flex flex-col gap-3">
                   <button
-                    onClick={() => {
-                      alert('Downloading NEXUS Master Architectural Suite (AutoCAD .DWG Templates + Revit 2026 BIM Families + AI Prompts)...');
-                    }}
-                    className="w-full sm:w-auto bg-signal text-ink-950 font-display font-semibold px-8 py-3.5 rounded-full hover:bg-signal-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-signal/20 cursor-pointer"
+                    onClick={() => alert('Downloading NEXUS Architectural Suite…')}
+                    className="w-full bg-signal text-ink-950 font-display font-semibold px-6 py-3.5 rounded-full hover:bg-signal-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-signal/20"
                   >
-                    <Download size={16} />
-                    <span>Download CAD & Revit Library (.ZIP)</span>
+                    <Download size={15} />
+                    <span>Download CAD &amp; Revit Library</span>
                   </button>
-
                   <button
                     onClick={resetForm}
-                    className="w-full sm:w-auto bg-ink-800 text-white font-display font-semibold px-6 py-3.5 rounded-full hover:bg-ink-700 border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full bg-ink-800 text-white font-display font-semibold px-6 py-3 rounded-full hover:bg-ink-700 border border-white/10 transition-all"
                   >
-                    <span>Done</span>
+                    Done
                   </button>
                 </div>
               </div>
             ) : (
-              /* Registration Form */
-              <form onSubmit={handleSubmit} className="space-y-6">
-                
-                {/* Validation Banner */}
+              /* ── Registration Form ── */
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                {/* Error Banner */}
                 {validationError && (
-                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 text-red-400 text-xs font-mono">
-                    <AlertCircle size={16} className="shrink-0" />
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start gap-2.5 text-red-400 text-xs font-mono">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
                     <span>{validationError}</span>
                   </div>
                 )}
 
-                {/* Name & Email Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
-                      <User size={13} className="text-signal" />
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Maya Lin"
-                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors font-body"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
-                      <Mail size={13} className="text-signal" />
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="e.g. architect@studio.com"
-                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors font-body"
-                    />
-                  </div>
+                {/* Name */}
+                <div>
+                  <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
+                    <User size={12} className="text-signal" /> Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Maya Lin"
+                    className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
+                  />
                 </div>
 
-                {/* Age & Profession Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-                  <div className="sm:col-span-4">
+                {/* Email */}
+                <div>
+                  <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
+                    <Mail size={12} className="text-signal" /> Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. architect@studio.com"
+                    className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
+                  />
+                </div>
+
+                {/* Age + Profession — stack on mobile, side by side on sm+ */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
                     <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
-                      <Calendar size={13} className="text-signal" />
-                      Age *
+                      <Calendar size={12} className="text-signal" /> Age *
                     </label>
                     <input
                       type="number"
@@ -317,19 +312,18 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                       value={age}
                       onChange={(e) => setAge(e.target.value)}
                       placeholder="e.g. 28"
+                      inputMode="numeric"
                       className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors font-mono"
                     />
                   </div>
-
-                  <div className="sm:col-span-8">
+                  <div className="sm:col-span-2">
                     <label className="block font-mono text-xs text-mist-900 mb-1.5 flex items-center gap-1.5">
-                      <Briefcase size={13} className="text-signal" />
-                      Professional Status *
+                      <Briefcase size={12} className="text-signal" /> Professional Role *
                     </label>
                     <select
                       value={profession}
                       onChange={(e) => setProfession(e.target.value)}
-                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors font-body cursor-pointer"
+                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-signal transition-colors"
                     >
                       {PROFESSIONS.map((p) => (
                         <option key={p} value={p} className="bg-ink-900 text-white">
@@ -340,53 +334,63 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                   </div>
                 </div>
 
-                {/* Referral Code (Mandatory) */}
+                {/* Referral Code */}
                 <div className="bg-ink-950/80 border border-white/10 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1.5 gap-2 flex-wrap">
                     <label className="font-mono text-xs text-white flex items-center gap-1.5 font-bold">
-                      <Key size={13} className="text-signal" />
-                      Referral Code (MUST to Sign In) *
+                      <Key size={12} className="text-signal" />
+                      Referral Code (Required) *
                     </label>
-                    <button
-                      type="button"
-                      onClick={handleApplySampleCode}
-                      className="text-[11px] font-mono text-signal hover:underline"
-                    >
-                      Use Demo Code: ARCH-2026-ALPHA
-                    </button>
                   </div>
-
                   <input
                     type="text"
                     required
                     value={referralCode}
                     onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                    placeholder="Enter 8+ character referral code"
-                    className="w-full bg-ink-900 border border-white/15 rounded-xl px-4 py-3 text-white font-mono text-sm tracking-widest focus:outline-none focus:border-signal transition-colors"
+                    placeholder="Enter your referral code"
+                    className="w-full bg-ink-900 border border-white/15 rounded-xl px-4 py-3 text-white font-mono text-sm tracking-wider focus:outline-none focus:border-signal transition-colors"
                   />
-
                   {codeStatus && (
-                    <div className={`mt-2 font-mono text-xs flex items-center gap-1.5 ${codeStatus.valid ? 'text-green-400' : 'text-red-400'}`}>
-                      {codeStatus.valid ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                      <span>{codeStatus.valid ? 'Valid Referral Code &bull; 100% Free Pass Unlocked' : codeStatus.message}</span>
+                    <div
+                      className={`mt-2 font-mono text-[11px] flex items-center gap-1.5 ${
+                        codeStatus.valid ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      {codeStatus.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                      <span>
+                        {codeStatus.valid
+                          ? '✓ Valid code — Free Lifetime Pass Unlocked'
+                          : codeStatus.message}
+                      </span>
                     </div>
                   )}
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit */}
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-signal text-ink-950 font-display font-bold text-base py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-signal text-ink-950 font-display font-bold text-sm sm:text-base py-4 rounded-full hover:bg-signal-dim transition-all shadow-xl shadow-signal/20 flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed"
                 >
-                  <Sparkles size={18} />
-                  <span>{isSubmitting ? 'Verifying & Claiming Access...' : 'Claim 1 of 1,000 Free Passes'}</span>
+                  {isSubmitting ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={18} />
+                  )}
+                  <span>{submitLabel()}</span>
                 </button>
 
-                <p className="text-center font-mono text-[11px] text-mist-900">
-                  🔒 Strictly limited to 1,000 early passes. By claiming access, you agree to our Terms & Privacy Policy.
-                </p>
+                {/* Location silent indicator — only visible while locating */}
+                {isLocating && (
+                  <p className="text-center font-mono text-[10px] text-mist-900/60 flex items-center justify-center gap-1.5">
+                    <Loader2 size={10} className="animate-spin" />
+                    Verifying connection…
+                  </p>
+                )}
 
+                <p className="text-center font-mono text-[10px] text-mist-900 leading-snug">
+                  🔒 Strictly limited to 1,000 passes. By submitting you agree to our Terms &amp; Privacy Policy.
+                </p>
               </form>
             )}
           </div>
