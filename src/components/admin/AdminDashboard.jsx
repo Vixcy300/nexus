@@ -3,7 +3,7 @@ import {
   X, Users, Key, Globe, Download, Plus, Copy, Check,
   Trash2, Search, LogOut, RefreshCw, Settings2,
   Loader2, AlertTriangle, MapPin, TrendingUp,
-  Shield, ChevronDown, ChevronUp
+  Shield, Navigation, ExternalLink, Compass
 } from 'lucide-react';
 import {
   getStoredUsers, getStoredReferralCodes, generateReferralCodes,
@@ -14,7 +14,7 @@ import {
 import { supabase } from '../../services/supabaseClient';
 
 const TABS = [
-  { id: 'users', label: 'Users',         icon: Users },
+  { id: 'users', label: 'Users & GPS',   icon: Users },
   { id: 'codes', label: 'Referral Codes',icon: Key },
   { id: 'geo',   label: 'Geo Analytics', icon: Globe },
   { id: 'settings', label: 'Settings',   icon: Settings2 },
@@ -32,6 +32,8 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
   // Users tab
   const [search, setSearch] = useState('');
   const [profFilter, setProfFilter] = useState('');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [copiedCoords, setCopiedCoords] = useState('');
 
   // Codes tab
   const [genCount,  setGenCount]  = useState(5);
@@ -92,11 +94,20 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
         u.name?.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q) ||
         u.referralCode?.toLowerCase().includes(q) ||
-        u.location?.city?.toLowerCase().includes(q);
+        u.location?.city?.toLowerCase().includes(q) ||
+        u.location?.suburb?.toLowerCase().includes(q) ||
+        u.location?.region?.toLowerCase().includes(q);
       const matchProf = !profFilter || u.profession === profFilter;
       return matchSearch && matchProf;
     });
   }, [users, search, profFilter]);
+
+  const handleCopyCoords = (coords) => {
+    navigator.clipboard.writeText(coords).then(() => {
+      setCopiedCoords(coords);
+      setTimeout(() => setCopiedCoords(''), 2000);
+    });
+  };
 
   // ─── Codes tab ────────────────────────────────────────────────────────────
   const availableCodes = codes.filter(c => c.status === 'available');
@@ -155,7 +166,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
   };
   const doReset = async () => {
     if (!window.confirm('Delete ALL users and reset all referral codes? This cannot be undone.')) return;
-    if (!window.confirm('Are you absolutely sure? All 0 registered users will be deleted.')) return;
+    if (!window.confirm('Are you absolutely sure? All registered users will be deleted.')) return;
     try { await resetStoreToEmpty(); await refreshData(); setSettingMsg('Database reset ✓'); }
     catch (e) { setSettingMsg('Error: ' + e.message); }
   };
@@ -167,18 +178,19 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
   };
   const exportCSV = () => {
     const rows = [
-      ['ID','Name','Email','Age','Profession','Referral Code','City','Region','Country','Lat','Lng','Accuracy (m)','Registered At'],
+      ['ID','Name','Email','Age','Profession','Referral Code','Suburb','Postal Code','City','Region','Country','Lat','Lng','Accuracy (m)','Google Maps Navigation','Registered At'],
       ...users.map(u => [
         u.id, u.name, u.email, u.age, u.profession, u.referralCode,
-        u.location?.city, u.location?.region, u.location?.country,
+        u.location?.suburb, u.location?.postalCode, u.location?.city, u.location?.region, u.location?.country,
         u.location?.latitude, u.location?.longitude, u.location?.accuracy,
+        u.location?.latitude && u.location?.longitude ? `https://www.google.com/maps?q=${u.location.latitude},${u.location.longitude}` : '',
         u.registeredAt,
       ]),
     ];
     const csv = rows.map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'nexus-users.csv'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = 'nexus-users-with-gps.csv'; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -196,7 +208,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
       <header className="shrink-0 bg-gray-900 border-b border-gray-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Shield size={18} className="text-green-400" />
-          <span className="font-mono text-sm font-bold text-white tracking-tight">NEXUS ADMIN</span>
+          <span className="font-mono text-sm font-bold text-white tracking-tight">NEXUS ADMIN &amp; GPS DISPATCH</span>
           <span className="hidden sm:block font-mono text-[11px] text-gray-500 border-l border-gray-700 pl-3">
             metheadminlover@gmail.com
           </span>
@@ -205,15 +217,15 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
           <span className="font-mono text-[11px] text-green-400 bg-green-400/10 border border-green-400/20 px-2.5 py-1 rounded-lg">
             {remaining} slots left
           </span>
-          <button onClick={refreshData} disabled={loading}
+          <button onClick={refreshData} disabled={loading} title="Refresh Live Data"
             className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors disabled:opacity-50">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button onClick={handleLogout}
+          <button onClick={handleLogout} title="Logout"
             className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors">
             <LogOut size={15} />
           </button>
-          <button onClick={onClose}
+          <button onClick={onClose} title="Close Admin"
             className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
             <X size={15} />
           </button>
@@ -242,14 +254,14 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
       <main className="flex-1 overflow-y-auto p-4 sm:p-6">
         {loading && (
           <div className="flex items-center justify-center h-40 gap-3 text-gray-400 font-mono text-sm">
-            <Loader2 size={18} className="animate-spin" /> Loading from Supabase…
+            <Loader2 size={18} className="animate-spin" /> Loading live data from Supabase…
           </div>
         )}
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3 text-red-400 font-mono text-sm">
             <AlertTriangle size={16} className="shrink-0 mt-0.5" />
             <div>
-              <div className="font-bold mb-1">Supabase Error</div>
+              <div className="font-bold mb-1">Supabase Connection Error</div>
               <div className="text-xs opacity-80">{error}</div>
               <button onClick={refreshData} className="mt-2 text-xs underline">Retry</button>
             </div>
@@ -264,10 +276,10 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                 {/* KPIs */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Registered',      val: users.length,                          color: 'text-white' },
-                    { label: 'Slots Remaining', val: remaining,                              color: 'text-green-400' },
-                    { label: 'Codes Available', val: availableCodes.length,                  color: 'text-blue-400' },
-                    { label: '% Claimed',       val: `${Math.round((users.length / TOTAL_FREE_QUOTA) * 100)}%`, color: 'text-purple-400' },
+                    { label: 'Registered Pioneers', val: users.length,                                      color: 'text-white' },
+                    { label: 'GPS Precision Locks', val: users.filter(u => u.location?.latitude).length,   color: 'text-green-400' },
+                    { label: 'Codes Available',     val: availableCodes.length,                             color: 'text-blue-400' },
+                    { label: 'Campaign Remaining',  val: remaining,                                         color: 'text-purple-400' },
                   ].map(({ label, val, color }) => (
                     <div key={label} className={kpiClass}>
                       <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
@@ -280,7 +292,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email, city…"
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, suburb, city, code…"
                       className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-green-400/50 placeholder-gray-600" />
                   </div>
                   <select value={profFilter} onChange={e => setProfFilter(e.target.value)}
@@ -290,7 +302,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                   </select>
                   <div className="flex gap-2">
                     <button onClick={exportCSV} className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-1.5`}>
-                      <Download size={12} /> CSV
+                      <Download size={12} /> CSV with GPS
                     </button>
                     <button onClick={exportJSON} className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-1.5`}>
                       <Download size={12} /> JSON
@@ -298,46 +310,143 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                   </div>
                 </div>
 
-                {/* Table */}
+                {/* Table with Accurate Latitude, Longitude and Direct Google Maps link */}
                 {filteredUsers.length === 0 ? (
                   <div className="text-center py-16 text-gray-600 font-mono text-sm">
-                    {users.length === 0 ? 'No users registered yet.' : 'No users match your search.'}
+                    {users.length === 0 ? 'No users registered yet.' : 'No users match your search query.'}
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-2xl border border-gray-800">
                     <table className="w-full text-xs font-mono">
                       <thead className="bg-gray-900 text-gray-500 uppercase tracking-wider text-[10px]">
                         <tr>
-                          {['#','Name','Email','Age','Profession','Code','Location','GPS Acc.','Registered'].map(h => (
-                            <th key={h} className="px-3 py-3 text-left whitespace-nowrap">{h}</th>
+                          {['#','Pioneer','Profession','Referral','Area & City','Exact Coordinates (Lat, Lng)','GPS Accuracy','Google Maps Navigation','Registered'].map(h => (
+                            <th key={h} className="px-3.5 py-3 text-left whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-800/60">
-                        {filteredUsers.map((u, i) => (
-                          <tr key={u.uuid || u.id} className="hover:bg-gray-900/50 transition-colors">
-                            <td className="px-3 py-3 text-gray-500">{i + 1}</td>
-                            <td className="px-3 py-3 text-white font-medium whitespace-nowrap">{u.name}</td>
-                            <td className="px-3 py-3 text-gray-300 whitespace-nowrap">{u.email}</td>
-                            <td className="px-3 py-3 text-gray-300">{u.age}</td>
-                            <td className="px-3 py-3 text-gray-300 max-w-[140px] truncate" title={u.profession}>{u.profession}</td>
-                            <td className="px-3 py-3 text-green-400 whitespace-nowrap">{u.referralCode}</td>
-                            <td className="px-3 py-3 text-gray-300 whitespace-nowrap">
-                              {[u.location?.city, u.location?.country].filter(Boolean).join(', ') || <span className="text-gray-600">—</span>}
-                            </td>
-                            <td className="px-3 py-3 text-gray-400">
-                              {u.location?.accuracy != null
-                                ? <span className={u.location.accuracy < 50 ? 'text-green-400' : u.location.accuracy < 200 ? 'text-yellow-400' : 'text-red-400'}>
-                                    ±{Math.round(u.location.accuracy)}m
+                        {filteredUsers.map((u, i) => {
+                          const hasCoords = u.location?.latitude != null && u.location?.longitude != null;
+                          const lat = hasCoords ? Number(u.location.latitude).toFixed(6) : null;
+                          const lng = hasCoords ? Number(u.location.longitude).toFixed(6) : null;
+                          const coordStr = hasCoords ? `${lat}, ${lng}` : null;
+                          const mapsUrl = hasCoords ? `https://www.google.com/maps?q=${u.location.latitude},${u.location.longitude}` : null;
+
+                          return (
+                            <tr key={u.uuid || u.id} className="hover:bg-gray-900/50 transition-colors">
+                              <td className="px-3.5 py-3 text-gray-500">{i + 1}</td>
+                              
+                              {/* User Info */}
+                              <td className="px-3.5 py-3 whitespace-nowrap">
+                                <div className="font-semibold text-white flex items-center gap-2">
+                                  <span>{u.name}</span>
+                                  <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20">
+                                    #{u.id}
                                   </span>
-                                : <span className="text-gray-600">—</span>
-                              }
-                            </td>
-                            <td className="px-3 py-3 text-gray-500 whitespace-nowrap">
-                              {u.registeredAt ? new Date(u.registeredAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}
-                            </td>
-                          </tr>
-                        ))}
+                                </div>
+                                <div className="text-gray-400 text-[11px] mt-0.5">{u.email}</div>
+                              </td>
+
+                              {/* Role */}
+                              <td className="px-3.5 py-3 text-gray-300 whitespace-nowrap">
+                                <div>{u.profession}</div>
+                                <div className="text-gray-500 text-[10px]">Age: {u.age}</div>
+                              </td>
+
+                              {/* Code */}
+                              <td className="px-3.5 py-3 text-green-400 font-semibold whitespace-nowrap">
+                                {u.referralCode}
+                              </td>
+
+                              {/* Location (Area + City + Country) */}
+                              <td className="px-3.5 py-3 whitespace-nowrap">
+                                <div className="text-white font-medium flex items-center gap-1.5">
+                                  <MapPin size={11} className="text-signal shrink-0" />
+                                  <span>{[u.location?.suburb, u.location?.city].filter(Boolean).join(', ') || u.location?.city || 'Undisclosed'}</span>
+                                </div>
+                                <div className="text-gray-500 text-[10px]">
+                                  {[u.location?.region, u.location?.country].filter(Boolean).join(', ')}
+                                  {u.location?.postalCode && ` · PIN: ${u.location.postalCode}`}
+                                </div>
+                              </td>
+
+                              {/* Exact GPS Coordinates with Copy button */}
+                              <td className="px-3.5 py-3 whitespace-nowrap">
+                                {hasCoords ? (
+                                  <div className="inline-flex items-center gap-1.5 bg-gray-900 border border-gray-700/80 px-2 py-1 rounded-md">
+                                    <span className="text-green-300 font-semibold select-all">{coordStr}</span>
+                                    <button
+                                      onClick={() => handleCopyCoords(`${u.location.latitude}, ${u.location.longitude}`)}
+                                      title="Copy coordinates to clipboard"
+                                      className="p-1 hover:text-white text-gray-400 transition-colors"
+                                    >
+                                      {copiedCoords === `${u.location.latitude}, ${u.location.longitude}` ? (
+                                        <Check size={11} className="text-green-400" />
+                                      ) : (
+                                        <Copy size={11} />
+                                      )}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-600 text-[11px]">No GPS fix</span>
+                                )}
+                              </td>
+
+                              {/* Accuracy badge */}
+                              <td className="px-3.5 py-3 whitespace-nowrap">
+                                {u.location?.accuracy != null ? (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      u.location.accuracy <= 30
+                                        ? 'bg-green-500/15 text-green-400 border-green-500/30'
+                                        : u.location.accuracy <= 100
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                        : u.location.accuracy <= 300
+                                        ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30'
+                                        : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+                                    }`}
+                                  >
+                                    ±{Math.round(u.location.accuracy)}m {u.location.accuracy <= 30 ? 'Precision' : 'Accuracy'}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-600">—</span>
+                                )}
+                              </td>
+
+                              {/* Open in Google Maps */}
+                              <td className="px-3.5 py-3 whitespace-nowrap">
+                                {hasCoords ? (
+                                  <a
+                                    href={mapsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:text-white transition-all font-semibold"
+                                  >
+                                    <Navigation size={11} className="rotate-45" />
+                                    <span>Google Maps</span>
+                                    <ExternalLink size={10} />
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-600 text-[11px]">Unavailable</span>
+                                )}
+                              </td>
+
+                              {/* Registered At */}
+                              <td className="px-3.5 py-3 text-gray-500 whitespace-nowrap">
+                                {u.registeredAt
+                                  ? new Date(u.registeredAt).toLocaleDateString('en-IN', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })
+                                  : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -470,7 +579,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                     {/* Ranked cities */}
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                       <div className="px-4 py-3 border-b border-gray-800 font-mono text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-2">
-                        <MapPin size={12} /> City Rankings
+                        <MapPin size={12} /> City Rankings &amp; GPS Clusters
                       </div>
                       <div className="divide-y divide-gray-800/60">
                         {geoData.rankedCities.map((c, i) => (
@@ -497,12 +606,12 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
 
                     {/* GPS coverage */}
                     <div className={kpiClass}>
-                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">GPS Coverage</span>
+                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">GPS Precision Coverage</span>
                       <span className="font-mono text-2xl font-bold text-blue-400">
                         {Math.round((users.filter(u => u.location?.latitude).length / users.length) * 100)}%
                       </span>
                       <span className="font-mono text-[10px] text-gray-600">
-                        {users.filter(u => u.location?.latitude).length} of {users.length} users with real GPS coordinates
+                        {users.filter(u => u.location?.latitude).length} of {users.length} users with exact coordinate fixes
                       </span>
                     </div>
                   </>
@@ -561,7 +670,7 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
                   <div className="flex gap-3">
                     <button onClick={exportCSV}
                       className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-2`}>
-                      <Download size={12} /> Download CSV
+                      <Download size={12} /> Download CSV with GPS
                     </button>
                     <button onClick={exportJSON}
                       className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-2`}>

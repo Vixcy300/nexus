@@ -65,8 +65,8 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
  * @returns {Promise<{ latitude: number, longitude: number, accuracy: number, timestamp: number }>}
  */
 export function getBestPosition({
-  targetAccuracy = 30,
-  maxWaitMs = 12000,
+  targetAccuracy = 15,
+  maxWaitMs = 15000,
   stallMs = 4000,
   signal,
 } = {}) {
@@ -114,22 +114,20 @@ export function getBestPosition({
           best = {
             latitude: coords.latitude,
             longitude: coords.longitude,
-            accuracy: Math.round(coords.accuracy),
+            accuracy: Math.round(coords.accuracy * 10) / 10,
             timestamp,
           };
           // Reset stall timer on every improvement
           clearTimeout(stallTimer);
           stallTimer = setTimeout(finish, stallMs);
         }
-        // Early exit if we hit the target accuracy
+        // Early exit if we hit the high-accuracy GPS target
         if (best.accuracy <= targetAccuracy) finish();
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
-          // Hard stop — no point watching further
           settle(reject, new GeoError('DENIED', 'Location permission was denied.'));
         } else if (best) {
-          // Already have something useful — finish with it
           finish();
         } else {
           settle(
@@ -141,7 +139,7 @@ export function getBestPosition({
           );
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   });
 }
@@ -153,23 +151,22 @@ const geoCache = new Map();
 
 /**
  * Reverse geocodes coordinates using Nominatim.
- * Rounds to 3 dp for caching and privacy (~110 m precision, fine for city lookup).
- * Returns null fields rather than fake strings.
+ * Rounds to 4 dp for street/suburb lookup (~11m precision).
  *
  * @param {number} lat
  * @param {number} lng
  * @param {{ signal?: AbortSignal }} opts
  */
 export async function reverseGeocode(lat, lng, { signal } = {}) {
-  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
   if (geoCache.has(key)) return geoCache.get(key);
 
-  // zoom=14 → suburb/city level. 4 dp ≈ 11 m, sufficient for lookup.
+  // zoom=18 → street and building level details
   const url =
     `https://nominatim.openstreetmap.org/reverse?format=jsonv2` +
-    `&lat=${lat.toFixed(4)}&lon=${lng.toFixed(4)}&zoom=14&addressdetails=1&accept-language=en`;
+    `&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}&zoom=18&addressdetails=1&accept-language=en`;
 
-  const timeout = AbortSignal.timeout ? AbortSignal.timeout(5000) : null;
+  const timeout = AbortSignal.timeout ? AbortSignal.timeout(6000) : null;
   const combined =
     signal && timeout
       ? AbortSignal.any([signal, timeout])
@@ -184,11 +181,12 @@ export async function reverseGeocode(lat, lng, { signal } = {}) {
   const { address: a = {} } = await res.json();
 
   const result = {
+    road:        a.road || a.pedestrian || a.street || null,
     city:        a.city || a.town || a.municipality || a.village || a.county || null,
     region:      a.state || a.region || null,
     country:     a.country || null,
     countryCode: a.country_code?.toUpperCase() || null,
-    suburb:      a.suburb || a.neighbourhood || a.quarter || null,
+    suburb:      a.suburb || a.neighbourhood || a.subdistrict || a.quarter || null,
     postalCode:  a.postcode || null,
   };
 

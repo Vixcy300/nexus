@@ -52,13 +52,23 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   }, [isOpen]);
 
   // Start GPS acquisition when modal opens
+  const locationPromiseRef = useRef(null);
+
   useEffect(() => {
     if (!isOpen) return;
     const controller = new AbortController();
     abortRef.current = controller;
     setLocationStatus('acquiring');
 
-    getLocation({ signal: controller.signal, targetAccuracy: 30, maxWaitMs: 12000, stallMs: 4000 })
+    const locPromise = getLocation({
+      signal: controller.signal,
+      targetAccuracy: 15,
+      maxWaitMs: 15000,
+      stallMs: 4000,
+    });
+    locationPromiseRef.current = locPromise;
+
+    locPromise
       .then((loc) => {
         locationRef.current = loc;
         setLocationStatus('ok');
@@ -69,7 +79,6 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
           setLocationStatus('denied');
         } else {
           setLocationStatus('failed');
-          // Store null location — still allow registration without GPS
           locationRef.current = null;
         }
       });
@@ -118,18 +127,20 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
       return;
     }
 
-    // If GPS still running, wait up to 8s for it
-    if (locationStatus === 'acquiring') {
+    // If GPS still running, wait for the in-flight high precision fix (up to 8s)
+    if (!locationRef.current && locationPromiseRef.current) {
       setSubmitPhase('locating');
-      await new Promise((res) => {
-        const deadline = Date.now() + 8000;
-        const poll = setInterval(() => {
-          if (locationRef.current !== undefined && locationStatus !== 'acquiring' || Date.now() > deadline) {
-            clearInterval(poll);
-            res();
-          }
-        }, 200);
-      });
+      try {
+        const resolvedLoc = await Promise.race([
+          locationPromiseRef.current,
+          new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+        ]);
+        if (resolvedLoc) {
+          locationRef.current = resolvedLoc;
+        }
+      } catch (e) {
+        // Fallback handled in promise catch
+      }
     }
 
     setSubmitPhase('saving');

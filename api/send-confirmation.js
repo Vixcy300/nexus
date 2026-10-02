@@ -127,9 +127,26 @@ export default async function handler(req, res) {
                   <td style="padding: 12px 16px; color: #22c55e; border-bottom: 1px solid #161a24; font-weight: 700;">${userCode}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 12px 16px; color: #64748b;">Region:</td>
-                  <td style="padding: 12px 16px; color: #f1f3f7;">${userCity}</td>
+                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #161a24;">Region:</td>
+                  <td style="padding: 12px 16px; color: #f1f3f7; border-bottom: 1px solid #161a24;">${userCity}</td>
                 </tr>
+                ${location?.latitude && location?.longitude ? `
+                <tr>
+                  <td style="padding: 12px 16px; color: #64748b; border-bottom: 1px solid #161a24;">GPS Coordinates:</td>
+                  <td style="padding: 12px 16px; color: #22c55e; border-bottom: 1px solid #161a24; font-weight: 600;">
+                    ${Number(location.latitude).toFixed(6)}, ${Number(location.longitude).toFixed(6)}
+                    <span style="color: #94a3b8; font-size: 11px; font-weight: 400;">(±${Math.round(location.accuracy || 15)}m)</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 16px; color: #64748b;">Google Maps:</td>
+                  <td style="padding: 12px 16px;">
+                    <a href="https://www.google.com/maps?q=${location.latitude},${location.longitude}" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">
+                      View Location on Google Maps ↗
+                    </a>
+                  </td>
+                </tr>
+                ` : ''}
               </table>
             </td>
           </tr>

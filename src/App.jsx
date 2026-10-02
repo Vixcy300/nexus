@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { MotionConfig } from 'framer-motion'
 
+import CustomCursor from './components/ui/CustomCursor'
 import ScrollProgressBar from './components/ui/ScrollProgressBar'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
@@ -98,6 +99,7 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="relative bg-ink-950 font-body text-mist-100 overflow-x-hidden selection:bg-signal selection:text-ink-950">
+        <CustomCursor />
         <ScrollProgressBar />
         
         {/* Navigation Bar */}
