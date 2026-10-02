@@ -31,9 +31,10 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   // Slots count loaded async
   const [remainingSlots, setRemainingSlots] = useState(TOTAL_FREE_QUOTA);
 
-  // GPS state (starts idle - ONLY queried when requested or on submit)
+  // Location state (queried in background on open and verified before submit)
   const [locationStatus, setLocationStatus] = useState('idle'); // 'idle' | 'acquiring' | 'ok' | 'denied' | 'failed'
   const locationRef = useRef(null);
+  const locationPromiseRef = useRef(null);
   const abortRef = useRef(null);
 
   // Code validation
@@ -46,10 +47,12 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
   const [submitPhase, setSubmitPhase] = useState('');
   const [registeredUser, setRegisteredUser] = useState(null);
 
-  // Load real slot count on open
+  // Load real slot count on open and start background location collection
   useEffect(() => {
     if (!isOpen) return;
     getRemainingSlots().then(setRemainingSlots).catch(() => {});
+    // Silently initiate background location verification
+    requestLocationFix().catch(() => {});
   }, [isOpen]);
 
   // Debounced async referral code validation
@@ -75,38 +78,52 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, isSubmitting]);
 
-  // Explicit location request handler
-  const requestLocationFix = async () => {
+  // Background location request handler with promise deduplication
+  const requestLocationFix = () => {
+    if (locationRef.current?.latitude != null) {
+      return Promise.resolve(locationRef.current);
+    }
+    if (locationPromiseRef.current) {
+      return locationPromiseRef.current;
+    }
+
     setLocationStatus('acquiring');
     setValidationError('');
 
     const controller = new AbortController();
     abortRef.current = controller;
 
-    try {
-      const loc = await getLocation({
-        signal: controller.signal,
-        targetAccuracy: 15,
-        maxWaitMs: 15000,
-        stallMs: 4000,
-      });
+    const promise = (async () => {
+      try {
+        const loc = await getLocation({
+          signal: controller.signal,
+          targetAccuracy: 15,
+          maxWaitMs: 15000,
+          stallMs: 4000,
+        });
 
-      locationRef.current = loc;
-      setLocationStatus('ok');
-      return loc;
-    } catch (err) {
-      if (err instanceof GeoError && err.code === 'ABORTED') {
-        setLocationStatus('idle');
-        return null;
+        locationRef.current = loc;
+        setLocationStatus('ok');
+        return loc;
+      } catch (err) {
+        if (err instanceof GeoError && err.code === 'ABORTED') {
+          setLocationStatus('idle');
+          return null;
+        }
+        if (err instanceof GeoError && err.code === 'DENIED') {
+          setLocationStatus('denied');
+        } else {
+          setLocationStatus('failed');
+        }
+        locationRef.current = null;
+        throw err;
+      } finally {
+        locationPromiseRef.current = null;
       }
-      if (err instanceof GeoError && err.code === 'DENIED') {
-        setLocationStatus('denied');
-      } else {
-        setLocationStatus('failed');
-      }
-      locationRef.current = null;
-      throw err;
-    }
+    })();
+
+    locationPromiseRef.current = promise;
+    return promise;
   };
 
   const handleSubmit = async (e) => {
@@ -146,11 +163,11 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
         setSubmitPhase('');
         if (err instanceof GeoError && err.code === 'DENIED') {
           setValidationError(
-            'Location access is mandatory to claim your Free Pioneer Pass. Please allow location permissions in your browser.'
+            'Location access is required to claim your Free Pioneer Pass. Please allow location permissions in your browser.'
           );
         } else {
           setValidationError(
-            'Unable to acquire GPS fix. Please ensure location is enabled on your device and try again.'
+            'Unable to acquire location. Please ensure location is enabled on your device and browser, then try again.'
           );
         }
         return;
@@ -161,7 +178,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     if (!loc || loc.latitude == null || loc.longitude == null) {
       setIsSubmitting(false);
       setSubmitPhase('');
-      setValidationError('Verified geographic location is required. Please grant location access to submit.');
+      setValidationError('Verified location is required. Please grant location access to submit.');
       return;
     }
 
@@ -214,6 +231,8 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   const resetForm = () => {
     abortRef.current?.abort();
+    locationPromiseRef.current = null;
+    locationRef.current = null;
     setRegisteredUser(null);
     setName('');
     setEmail('');
@@ -222,7 +241,6 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
     setValidationError('');
     setCodeStatus(null);
     setLocationStatus('idle');
-    locationRef.current = null;
     onClose();
   };
 
@@ -230,10 +248,10 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
 
   const btnLabel = () => {
     if (submitPhase === 'validating') return 'Checking referral code…';
-    if (submitPhase === 'locating') return 'Verifying high-precision GPS…';
+    if (submitPhase === 'locating' || locationStatus === 'acquiring') return 'Verifying location…';
     if (submitPhase === 'saving') return 'Securing your Pioneer Pass…';
-    if (locationStatus === 'ok') return 'Claim Free Pioneer Pass →';
-    return 'Verify Location & Claim Pass →';
+    if (locationStatus === 'denied' || locationStatus === 'failed') return 'Allow Location to Submit';
+    return 'Claim Free Pioneer Pass →';
   };
 
   return (
@@ -463,121 +481,42 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                   )}
                 </div>
 
-                {/* ── Geographic Telemetry Status Card (MANDATORY REQUIREMENT) ── */}
-                {locationStatus === 'idle' && (
-                  <div className="bg-ink-950/80 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start gap-2.5">
-                      <MapPin size={16} className="text-signal shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-mono text-xs text-white font-bold block">
-                          GPS Location Verification (Mandatory)
-                        </span>
-                        <p className="font-mono text-[11px] text-mist-700 mt-0.5">
-                          High-precision coordinates map NEXUS Studio&apos;s next research lab.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={requestLocationFix}
-                      disabled={isSubmitting}
-                      className="px-3.5 py-1.5 rounded-lg bg-signal/10 border border-signal/30 text-signal hover:bg-signal/20 font-mono text-xs font-semibold shrink-0 transition-colors"
-                    >
-                      Verify Location Now
-                    </button>
-                  </div>
-                )}
-
+                {/* ── Background Location Verification Status ── */}
                 {locationStatus === 'acquiring' && (
-                  <div className="bg-signal/5 border border-signal/30 rounded-2xl p-4 flex items-center gap-3 text-signal">
-                    <Loader2 size={16} className="animate-spin shrink-0" />
-                    <div className="font-mono text-xs">
-                      <div className="font-bold">Acquiring GPS fix (target accuracy ≤15m)…</div>
-                      <div className="text-[11px] text-signal/80 mt-0.5">
-                        Please tap &quot;Allow&quot; in the browser location popup.
-                      </div>
-                    </div>
+                  <div className="flex items-center justify-center gap-2 font-mono text-xs text-mist-500 py-1.5">
+                    <Loader2 size={13} className="animate-spin text-signal" />
+                    <span>Verifying location in background…</span>
                   </div>
                 )}
 
-                {locationStatus === 'ok' && locationRef.current && (
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between gap-3 text-emerald-400">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <CheckCircle2 size={18} className="shrink-0" />
-                      <div className="min-w-0 font-mono text-xs">
-                        <div className="font-bold text-white flex items-center gap-2">
-                          <span>Location Verified</span>
-                          {locationRef.current.accuracy != null && (
-                            <span className="text-[10px] text-signal bg-signal/10 px-2 py-0.2 rounded-full border border-signal/25">
-                              ±{Math.round(locationRef.current.accuracy)}m Precision
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-mist-500 truncate mt-0.5">
-                          {[
-                            locationRef.current.suburb,
-                            locationRef.current.city,
-                            locationRef.current.country,
-                          ]
-                            .filter(Boolean)
-                            .join(', ') || 'Coordinates Locked'}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="font-mono text-[10px] text-emerald-400 uppercase tracking-widest bg-emerald-500/20 px-2 py-1 rounded shrink-0">
-                      Verified
-                    </span>
+                {locationStatus === 'ok' && (
+                  <div className="flex items-center justify-center gap-1.5 font-mono text-xs text-emerald-400 py-1.5">
+                    <CheckCircle2 size={13} />
+                    <span>Location verified</span>
                   </div>
                 )}
 
-                {locationStatus === 'denied' && (
-                  <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-start gap-2.5 text-red-400">
-                      <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                      <div className="font-mono text-xs">
-                        <span className="font-bold block text-white">
-                          Location Access Denied — Registration Blocked
-                        </span>
-                        <p className="text-mist-500 text-[11px] mt-1 leading-relaxed">
-                          Pioneer Passes strictly require verified coordinates to determine studio deployment. To enable:
-                        </p>
-                        <ol className="list-decimal list-inside text-mist-700 text-[11px] mt-1 space-y-0.5">
-                          <li>
-                            Click the lock icon <span className="text-white font-bold">🔒</span> in your browser address bar
-                          </li>
-                          <li>
-                            Set <span className="text-white">Location</span> to{' '}
-                            <span className="text-emerald-400 font-bold">Allow</span>
-                          </li>
-                          <li>Click the button below to re-verify</li>
-                        </ol>
+                {(locationStatus === 'denied' || locationStatus === 'failed') && (
+                  <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-3.5 sm:p-4 text-xs font-mono space-y-2.5 text-red-400">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle size={15} className="shrink-0 text-red-400" />
+                        <span className="font-semibold text-white">Location access required</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          locationPromiseRef.current = null;
+                          requestLocationFix().catch(() => {});
+                        }}
+                        className="px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-white font-bold transition-colors shrink-0"
+                      >
+                        Enable Location
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={requestLocationFix}
-                      disabled={isSubmitting}
-                      className="w-full py-2.5 rounded-xl bg-signal text-ink-950 font-mono text-xs font-bold hover:bg-signal-dim transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-signal/15"
-                    >
-                      <Navigation size={13} className="rotate-45" />
-                      <span>Retry Location Permission Access</span>
-                    </button>
-                  </div>
-                )}
-
-                {locationStatus === 'failed' && (
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-400 font-mono text-xs">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle size={15} className="shrink-0" />
-                      <span>GPS signal timeout. Please ensure location is enabled.</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={requestLocationFix}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs"
-                    >
-                      Retry GPS Fix
-                    </button>
+                    <p className="text-[11px] text-mist-700 leading-relaxed">
+                      Location permission is turned off or blocked in your browser. Please allow location access to submit your registration.
+                    </p>
                   </div>
                 )}
 
@@ -592,7 +531,7 @@ export default function AccessModal({ isOpen, onClose, onUserRegistered }) {
                 </button>
 
                 <p className="text-center font-mono text-[10px] text-mist-900 leading-snug">
-                  🔒 Strictly limited to 1,000 passes. Mandatory GPS verification ensures fair distribution.
+                  🔒 Strictly limited to 1,000 passes. One claim per verified creator.
                 </p>
               </form>
             )}
