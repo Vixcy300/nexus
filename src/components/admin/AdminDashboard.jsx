@@ -3,51 +3,70 @@ import {
   X, Users, Key, Globe, Download, Plus, Copy, Check,
   Trash2, Search, LogOut, RefreshCw, Settings2,
   Loader2, AlertTriangle, MapPin, TrendingUp,
-  Shield, Navigation, ExternalLink, Compass
+  Shield, Navigation, ExternalLink, Mail, Send,
+  ChevronRight, CheckCircle2, Filter, ArrowUpDown,
+  Sparkles, SlidersHorizontal, Radio, Layers
 } from 'lucide-react';
 import {
   getStoredUsers, getStoredReferralCodes, generateReferralCodes,
   deleteReferralCode, logoutAdmin, getQuotaSettings, getRemainingSlots,
   setRemainingSlotsCount, resetRemainingSlotsToAuto, setTotalQuota,
-  resetStoreToEmpty, TOTAL_FREE_QUOTA,
+  resetStoreToEmpty, deleteUser, createCustomReferralCode, TOTAL_FREE_QUOTA,
 } from '../../services/storeService';
 import { supabase } from '../../services/supabaseClient';
 
 const TABS = [
-  { id: 'users', label: 'Users & GPS',   icon: Users },
-  { id: 'codes', label: 'Referral Codes',icon: Key },
-  { id: 'geo',   label: 'Geo Analytics', icon: Globe },
-  { id: 'settings', label: 'Settings',   icon: Settings2 },
+  { id: 'users', label: 'Pioneer Registry & GPS', icon: Users },
+  { id: 'codes', label: 'Referral Engine', icon: Key },
+  { id: 'geo', label: 'Geo Analytics & Labs', icon: Globe },
+  { id: 'settings', label: 'Studio Controls', icon: Settings2 },
 ];
 
 export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
-  const [tab,    setTab]    = useState('users');
-  const [users,  setUsers]  = useState([]);
-  const [codes,  setCodes]  = useState([]);
-  const [quota,  setQuota]  = useState({ totalQuota: 1000, manualRemaining: null });
+  const [tab, setTab] = useState('users');
+  const [users, setUsers] = useState([]);
+  const [codes, setCodes] = useState([]);
+  const [quota, setQuota] = useState({ totalQuota: 1000, manualRemaining: null });
   const [remaining, setRemaining] = useState(1000);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  const [error, setError] = useState(null);
 
-  // Users tab
+  // Users tab filters & state
   const [search, setSearch] = useState('');
   const [profFilter, setProfFilter] = useState('');
+  const [geoFilter, setGeoFilter] = useState('all'); // 'all' | 'gps' | 'nogps'
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'oldest' | 'accuracy' | 'name'
   const [selectedUser, setSelectedUser] = useState(null);
   const [copiedCoords, setCopiedCoords] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
 
-  // Codes tab
-  const [genCount,  setGenCount]  = useState(5);
+  // Codes tab state
+  const [genCount, setGenCount] = useState(5);
   const [genPrefix, setGenPrefix] = useState('NEXUS');
+  const [customCode, setCustomCode] = useState('');
+  const [customTag, setCustomTag] = useState('VIP');
+  const [codeStatusFilter, setCodeStatusFilter] = useState('all'); // 'all' | 'available' | 'redeemed'
+  const [codeSearch, setCodeSearch] = useState('');
   const [genLoading, setGenLoading] = useState(false);
   const [copied, setCopied] = useState('');
 
-  // Settings tab
+  // Email resending state
+  const [resendingEmailId, setResendingEmailId] = useState(null);
+
+  // Settings tab state
   const [newManual, setNewManual] = useState('');
-  const [newTotal,  setNewTotal]  = useState('');
+  const [newTotal, setNewTotal] = useState('');
   const [settingMsg, setSettingMsg] = useState('');
+  const [resetConfirm, setResetConfirm] = useState(false);
+
+  const showNotice = (msg) => {
+    setActionNotice(msg);
+    setTimeout(() => setActionNotice(''), 3500);
+  };
 
   const refreshData = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
       const [u, c, q, r] = await Promise.all([
         getStoredUsers(),
@@ -55,29 +74,43 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
         getQuotaSettings(),
         getRemainingSlots(),
       ]);
-      setUsers(u); setCodes(c); setQuota(q); setRemaining(r);
+      setUsers(u);
+      setCodes(c);
+      setQuota(q);
+      setRemaining(r);
       if (onRefreshData) onRefreshData();
     } catch (e) {
-      setError(e.message || 'Failed to load data from Supabase.');
+      setError(e.message || 'Failed to sync with Supabase.');
     } finally {
       setLoading(false);
     }
   }, [onRefreshData]);
 
-  // Load on open
-  useEffect(() => { if (isOpen) { setTab('users'); refreshData(); } }, [isOpen]);
-
-  // Real-time: when a new user is inserted, refresh immediately
+  // Load when opened
   useEffect(() => {
-    if (!isOpen) return;
-    const channel = supabase.channel('nexus_admin_rt')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'nexus_users' }, refreshData)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'nexus_referral_codes' }, refreshData)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
+    if (isOpen) {
+      refreshData();
+    }
   }, [isOpen, refreshData]);
 
-  // Window event fallback
+  // Real-time Supabase WebSockets channel
+  useEffect(() => {
+    if (!isOpen) return;
+    const channel = supabase.channel('nexus_admin_realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'nexus_users' }, refreshData)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'nexus_users' }, refreshData)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'nexus_users' }, refreshData)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'nexus_referral_codes' }, refreshData)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'nexus_referral_codes' }, refreshData)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'nexus_referral_codes' }, refreshData)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, refreshData]);
+
+  // Handle slot update custom events
   useEffect(() => {
     if (!isOpen) return;
     const fn = () => refreshData();
@@ -85,616 +118,1437 @@ export default function AdminDashboard({ isOpen, onClose, onRefreshData }) {
     return () => window.removeEventListener('nexus_slots_updated', fn);
   }, [isOpen, refreshData]);
 
-  // ─── Users tab ────────────────────────────────────────────────────────────
+  // ─── Users Filtering & Sorting ──────────────────────────────────────────────
   const professions = useMemo(() => [...new Set(users.map(u => u.profession).filter(Boolean))], [users]);
+
   const filteredUsers = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
     return users.filter(u => {
       const matchSearch = !q ||
         u.name?.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q) ||
+        u.id?.toLowerCase().includes(q) ||
         u.referralCode?.toLowerCase().includes(q) ||
         u.location?.city?.toLowerCase().includes(q) ||
         u.location?.suburb?.toLowerCase().includes(q) ||
-        u.location?.region?.toLowerCase().includes(q);
+        u.location?.region?.toLowerCase().includes(q) ||
+        u.location?.country?.toLowerCase().includes(q);
+
       const matchProf = !profFilter || u.profession === profFilter;
-      return matchSearch && matchProf;
+      
+      const hasGps = u.location?.latitude != null && u.location?.longitude != null;
+      const matchGeo = geoFilter === 'all' ? true : (geoFilter === 'gps' ? hasGps : !hasGps);
+
+      return matchSearch && matchProf && matchGeo;
+    }).sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.registeredAt || 0) - new Date(a.registeredAt || 0);
+      }
+      if (sortBy === 'oldest') {
+        return new Date(a.registeredAt || 0) - new Date(b.registeredAt || 0);
+      }
+      if (sortBy === 'accuracy') {
+        return (a.location?.accuracy ?? 9999) - (b.location?.accuracy ?? 9999);
+      }
+      if (sortBy === 'name') {
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      return 0;
     });
-  }, [users, search, profFilter]);
+  }, [users, search, profFilter, geoFilter, sortBy]);
 
   const handleCopyCoords = (coords) => {
     navigator.clipboard.writeText(coords).then(() => {
       setCopiedCoords(coords);
+      showNotice(`Coordinates copied: ${coords}`);
       setTimeout(() => setCopiedCoords(''), 2000);
     });
   };
 
-  // ─── Codes tab ────────────────────────────────────────────────────────────
-  const availableCodes = codes.filter(c => c.status === 'available');
-  const redeemedCodes  = codes.filter(c => c.status === 'redeemed');
+  const handleDeleteSingleUser = async (userToDelete) => {
+    if (!window.confirm(`Permanently remove pioneer "${userToDelete.name}" (${userToDelete.email})? This frees up 1 quota slot.`)) {
+      return;
+    }
+    try {
+      await deleteUser(userToDelete.uuid || userToDelete.id);
+      if (selectedUser?.id === userToDelete.id) {
+        setSelectedUser(null);
+      }
+      showNotice(`Pioneer ${userToDelete.name} removed.`);
+      await refreshData();
+    } catch (e) {
+      alert(`Deletion failed: ${e.message}`);
+    }
+  };
 
-  const handleGenerate = async () => {
+  const handleResendConfirmation = async (user) => {
+    setResendingEmailId(user.id);
+    try {
+      const res = await fetch('/api/send-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: user.name,
+          email: user.email,
+          id: user.id,
+          profession: user.profession,
+          referralCode: user.referralCode,
+          location: user.location,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showNotice(`Confirmation pass re-sent to ${user.email} ✓`);
+      } else {
+        alert(`Email dispatch error: ${data.error || 'Server error'}`);
+      }
+    } catch (err) {
+      alert(`Network error dispatching email: ${err.message}`);
+    } finally {
+      setResendingEmailId(null);
+    }
+  };
+
+  // ─── Referral Codes Handling ───────────────────────────────────────────────
+  const availableCodes = useMemo(() => codes.filter(c => c.status === 'available'), [codes]);
+  const redeemedCodes  = useMemo(() => codes.filter(c => c.status === 'redeemed'), [codes]);
+
+  const filteredCodes = useMemo(() => {
+    const q = codeSearch.toLowerCase().trim();
+    return codes.filter(c => {
+      const matchSearch = !q ||
+        c.code?.toLowerCase().includes(q) ||
+        c.redeemedBy?.toLowerCase().includes(q) ||
+        c.tags?.some(t => t.toLowerCase().includes(q));
+
+      const matchStatus = codeStatusFilter === 'all' || c.status === codeStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [codes, codeSearch, codeStatusFilter]);
+
+  const handleGenerateBatch = async () => {
     setGenLoading(true);
-    try { await generateReferralCodes(genCount, genPrefix); await refreshData(); }
-    catch (e) { alert('Generate failed: ' + e.message); }
-    finally { setGenLoading(false); }
+    try {
+      await generateReferralCodes(genCount, genPrefix);
+      await refreshData();
+      showNotice(`Generated ${genCount} codes with prefix ${genPrefix.toUpperCase()} ✓`);
+    } catch (e) {
+      alert(`Generate failed: ${e.message}`);
+    } finally {
+      setGenLoading(false);
+    }
   };
 
-  const handleDelete = async (code) => {
-    if (!window.confirm(`Delete code "${code}"?`)) return;
-    try { await deleteReferralCode(code); await refreshData(); }
-    catch (e) { alert('Delete failed: ' + e.message); }
+  const handleCreateCustomCode = async (e) => {
+    e.preventDefault();
+    if (!customCode.trim()) return;
+    setGenLoading(true);
+    try {
+      const tags = customTag.split(',').map(t => t.trim()).filter(Boolean);
+      await createCustomReferralCode(customCode, tags.length ? tags : ['VIP']);
+      setCustomCode('');
+      await refreshData();
+      showNotice(`Custom code created: ${customCode.toUpperCase()} ✓`);
+    } catch (err) {
+      alert(`Creation error: ${err.message}`);
+    } finally {
+      setGenLoading(false);
+    }
   };
 
-  const handleCopy = (code) => {
+  const handleDeleteCode = async (code) => {
+    if (!window.confirm(`Delete referral pass "${code}"?`)) return;
+    try {
+      await deleteReferralCode(code);
+      await refreshData();
+      showNotice(`Code ${code} deleted.`);
+    } catch (e) {
+      alert(`Delete failed: ${e.message}`);
+    }
+  };
+
+  const handleCopyCode = (code) => {
     navigator.clipboard.writeText(code).then(() => {
       setCopied(code);
+      showNotice(`Code copied: ${code}`);
       setTimeout(() => setCopied(''), 1500);
     });
   };
 
-  // ─── Geo tab ─────────────────────────────────────────────────────────────
+  const handleCopyAllAvailableCodes = () => {
+    if (!availableCodes.length) return;
+    const text = availableCodes.map(c => c.code).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      showNotice(`Copied ${availableCodes.length} available codes to clipboard!`);
+    });
+  };
+
+  // ─── Geo Analytics ────────────────────────────────────────────────────────
   const geoData = useMemo(() => {
-    if (!users.length) return { rankedCities: [], countries: {} };
+    if (!users.length) return { rankedCities: [], countries: {}, withGps: 0, highPrecision: 0 };
     const cityMap = {};
     const countries = {};
+    let withGps = 0;
+    let highPrecision = 0;
+
     users.forEach(u => {
-      const city    = u.location?.city    || 'Unknown';
-      const country = u.location?.country || 'Unknown';
+      const city = u.location?.city || 'Unknown';
+      const country = u.location?.country || 'Global Network';
       const key = `${city}|${country}`;
-      cityMap[key] = cityMap[key] || { city, country, count: 0, gpsCount: 0 };
+      cityMap[key] = cityMap[key] || { city, country, count: 0, gpsCount: 0, sumAccuracy: 0 };
       cityMap[key].count++;
-      if (u.location?.latitude) cityMap[key].gpsCount++;
+
+      if (u.location?.latitude != null && u.location?.longitude != null) {
+        withGps++;
+        cityMap[key].gpsCount++;
+        if (u.location?.accuracy != null) {
+          cityMap[key].sumAccuracy += u.location.accuracy;
+          if (u.location.accuracy <= 30) highPrecision++;
+        }
+      }
       countries[country] = (countries[country] || 0) + 1;
     });
-    const rankedCities = Object.values(cityMap).sort((a, b) => b.count - a.count);
-    return { rankedCities, countries };
+
+    const rankedCities = Object.values(cityMap).map(c => ({
+      ...c,
+      avgAccuracy: c.gpsCount > 0 ? Math.round(c.sumAccuracy / c.gpsCount) : null,
+    })).sort((a, b) => b.count - a.count);
+
+    return { rankedCities, countries, withGps, highPrecision };
   }, [users]);
 
-  // ─── Settings tab ─────────────────────────────────────────────────────────
+  // ─── Settings Controls ────────────────────────────────────────────────────
   const doSetManual = async () => {
-    try { await setRemainingSlotsCount(newManual); setSettingMsg('Manual slots updated ✓'); await refreshData(); }
-    catch (e) { setSettingMsg('Error: ' + e.message); }
+    try {
+      await setRemainingSlotsCount(newManual);
+      setSettingMsg('Manual remaining slots updated ✓');
+      await refreshData();
+    } catch (e) {
+      setSettingMsg(`Error: ${e.message}`);
+    }
   };
+
   const doResetAuto = async () => {
-    try { await resetRemainingSlotsToAuto(); setSettingMsg('Reset to auto-calculate ✓'); await refreshData(); }
-    catch (e) { setSettingMsg('Error: ' + e.message); }
+    try {
+      await resetRemainingSlotsToAuto();
+      setSettingMsg('Reset to automatic slot calculation ✓');
+      await refreshData();
+    } catch (e) {
+      setSettingMsg(`Error: ${e.message}`);
+    }
   };
+
   const doSetTotal = async () => {
-    try { await setTotalQuota(newTotal); setSettingMsg('Total quota updated ✓'); await refreshData(); }
-    catch (e) { setSettingMsg('Error: ' + e.message); }
+    try {
+      await setTotalQuota(newTotal);
+      setSettingMsg('Total quota cap updated ✓');
+      await refreshData();
+    } catch (e) {
+      setSettingMsg(`Error: ${e.message}`);
+    }
   };
-  const doReset = async () => {
-    if (!window.confirm('Delete ALL users and reset all referral codes? This cannot be undone.')) return;
-    if (!window.confirm('Are you absolutely sure? All registered users will be deleted.')) return;
-    try { await resetStoreToEmpty(); await refreshData(); setSettingMsg('Database reset ✓'); }
-    catch (e) { setSettingMsg('Error: ' + e.message); }
+
+  const doResetEntireStore = async () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      return;
+    }
+    try {
+      await resetStoreToEmpty();
+      setResetConfirm(false);
+      await refreshData();
+      showNotice('Database reset to fresh state ✓');
+    } catch (e) {
+      alert(`Reset error: ${e.message}`);
+    }
   };
+
+  // ─── Exports ──────────────────────────────────────────────────────────────
   const exportJSON = () => {
-    const blob = new Blob([JSON.stringify({ users, codes, quota }, null, 2)], { type: 'application/json' });
+    const data = {
+      exportedAt: new Date().toISOString(),
+      studioQuota: quota,
+      remainingSlots: remaining,
+      totalUsers: users.length,
+      users,
+      referralCodes: codes,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'nexus-export.json'; a.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nexus-telemetry-export-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
     URL.revokeObjectURL(url);
+    showNotice('Exported full JSON archive ✓');
   };
+
   const exportCSV = () => {
     const rows = [
-      ['ID','Name','Email','Age','Profession','Referral Code','Suburb','Postal Code','City','Region','Country','Lat','Lng','Accuracy (m)','Google Maps Navigation','Registered At'],
+      [
+        'Member ID', 'Name', 'Email', 'Age', 'Profession', 'Referral Code',
+        'Suburb', 'Postal Code', 'City', 'Region', 'Country',
+        'Latitude', 'Longitude', 'GPS Accuracy (m)', 'Direct Google Maps Navigation Link',
+        'Registered At'
+      ],
       ...users.map(u => [
-        u.id, u.name, u.email, u.age, u.profession, u.referralCode,
-        u.location?.suburb, u.location?.postalCode, u.location?.city, u.location?.region, u.location?.country,
-        u.location?.latitude, u.location?.longitude, u.location?.accuracy,
-        u.location?.latitude && u.location?.longitude ? `https://www.google.com/maps?q=${u.location.latitude},${u.location.longitude}` : '',
+        u.id,
+        u.name,
+        u.email,
+        u.age,
+        u.profession,
+        u.referralCode,
+        u.location?.suburb,
+        u.location?.postalCode,
+        u.location?.city,
+        u.location?.region,
+        u.location?.country,
+        u.location?.latitude,
+        u.location?.longitude,
+        u.location?.accuracy,
+        u.location?.latitude && u.location?.longitude
+          ? `https://www.google.com/maps?q=${u.location.latitude},${u.location.longitude}`
+          : '',
         u.registeredAt,
       ]),
     ];
-    const csv = rows.map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csvContent = rows.map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'nexus-users-with-gps.csv'; a.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nexus-pioneers-gps-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
     URL.revokeObjectURL(url);
+    showNotice('Exported CSV with GPS telemetry ✓');
   };
 
-  // ─── Logout ───────────────────────────────────────────────────────────────
-  const handleLogout = () => { logoutAdmin(); onClose(); };
+  const handleLogout = () => {
+    logoutAdmin();
+    onClose();
+  };
 
   if (!isOpen) return null;
 
-  const kpiClass = 'bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-1';
-  const btnClass = 'px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors';
-
   return (
-    <div className="fixed inset-0 z-[200] bg-gray-950 flex flex-col overflow-hidden">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="shrink-0 bg-gray-900 border-b border-gray-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Shield size={18} className="text-green-400" />
-          <span className="font-mono text-sm font-bold text-white tracking-tight">NEXUS ADMIN &amp; GPS DISPATCH</span>
-          <span className="hidden sm:block font-mono text-[11px] text-gray-500 border-l border-gray-700 pl-3">
-            metheadminlover@gmail.com
-          </span>
+    <div className="fixed inset-0 z-[200] bg-ink-950 text-mist-100 flex flex-col overflow-hidden font-body antialiased selection:bg-signal selection:text-ink-950">
+      
+      {/* ── Top Command Bar ─────────────────────────────────────────────────── */}
+      <header className="shrink-0 bg-ink-900/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4 z-20">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-signal/10 border border-signal/30 flex items-center justify-center text-signal shrink-0 shadow-lg shadow-signal/10">
+            <Shield size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display font-bold text-white text-sm sm:text-base tracking-tight">
+                NEXUS STUDIO
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-signal bg-signal/10 px-2 py-0.5 rounded-full border border-signal/25 hidden xs:inline-block">
+                Command OS
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-mono text-mist-700">
+              <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Live Realtime Sync
+              </span>
+              <span className="hidden md:inline text-white/20">•</span>
+              <span className="hidden md:inline text-[11px] text-mist-900 truncate">
+                metheadminlover@gmail.com
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] text-green-400 bg-green-400/10 border border-green-400/20 px-2.5 py-1 rounded-lg">
-            {remaining} slots left
-          </span>
-          <button onClick={refreshData} disabled={loading} title="Refresh Live Data"
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors disabled:opacity-50">
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+
+        {/* Global Stats & Controls */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="bg-ink-950/80 border border-white/10 rounded-xl px-3 py-1.5 hidden sm:flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-signal"></div>
+            <span className="font-mono text-xs text-white font-bold">{remaining}</span>
+            <span className="font-mono text-[10px] text-mist-700 uppercase tracking-wider">Slots Left</span>
+          </div>
+
+          <button
+            onClick={refreshData}
+            disabled={loading}
+            title="Force refresh data"
+            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-ink-800/80 border border-white/10 text-mist-500 hover:text-white hover:border-white/20 transition-all flex items-center gap-2 text-xs font-mono disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin text-signal' : ''} />
+            <span className="hidden md:inline">Sync</span>
           </button>
-          <button onClick={handleLogout} title="Logout"
-            className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors">
-            <LogOut size={15} />
+
+          <button
+            onClick={handleLogout}
+            title="Log out of admin session"
+            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-ink-800/80 border border-white/10 text-mist-500 hover:text-red-400 hover:border-red-500/30 transition-all flex items-center gap-2 text-xs font-mono"
+          >
+            <LogOut size={14} />
+            <span className="hidden md:inline">Logout</span>
           </button>
-          <button onClick={onClose} title="Close Admin"
-            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
-            <X size={15} />
+
+          <button
+            onClick={onClose}
+            title="Close command panel"
+            className="p-2 rounded-xl bg-white/5 border border-white/10 text-mist-500 hover:text-white hover:bg-white/10 transition-all"
+          >
+            <X size={16} />
           </button>
         </div>
       </header>
 
-      {/* ── Tab Bar ────────────────────────────────────────────────────────── */}
-      <nav className="shrink-0 bg-gray-900 border-b border-gray-800 px-4 sm:px-6 flex gap-1 overflow-x-auto">
+      {/* ── Sub Navigation Tabs ──────────────────────────────────────────────── */}
+      <nav className="shrink-0 bg-ink-900/60 backdrop-blur-md border-b border-white/5 px-4 sm:px-8 flex items-center gap-2 overflow-x-auto no-scrollbar z-10">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`flex items-center gap-2 px-3 py-3 font-mono text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-2.5 px-4 py-3.5 font-mono text-xs font-semibold whitespace-nowrap border-b-2 transition-all ${
               tab === id
-                ? 'border-green-400 text-green-400'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}>
-            <Icon size={13} />
-            {label}
+                ? 'border-signal text-signal bg-signal/5'
+                : 'border-transparent text-mist-700 hover:text-mist-100 hover:bg-white/[0.02]'
+            }`}
+          >
+            <Icon size={14} />
+            <span>{label}</span>
             {id === 'users' && users.length > 0 && (
-              <span className="bg-gray-800 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">{users.length}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                tab === id ? 'bg-signal text-ink-950' : 'bg-white/10 text-mist-500'
+              }`}>
+                {users.length}
+              </span>
+            )}
+            {id === 'codes' && availableCodes.length > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
+                {availableCodes.length}
+              </span>
             )}
           </button>
         ))}
-      </nav>
 
-      {/* ── Content ────────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {loading && (
-          <div className="flex items-center justify-center h-40 gap-3 text-gray-400 font-mono text-sm">
-            <Loader2 size={18} className="animate-spin" /> Loading live data from Supabase…
+        {/* Global Toast Notification */}
+        {actionNotice && (
+          <div className="ml-auto hidden sm:flex items-center gap-2 text-xs font-mono text-signal bg-signal/10 border border-signal/30 px-3 py-1 rounded-full animate-fade-in">
+            <CheckCircle2 size={13} />
+            <span>{actionNotice}</span>
           </div>
         )}
+      </nav>
+
+      {/* ── Main Dashboard Body ──────────────────────────────────────────────── */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6">
+        
+        {/* Loading Banner */}
+        {loading && (
+          <div className="flex items-center justify-center py-12 gap-3 text-signal font-mono text-sm bg-ink-900/40 border border-white/5 rounded-2xl">
+            <Loader2 size={18} className="animate-spin" />
+            <span>Refreshing live architectural telemetry from Supabase…</span>
+          </div>
+        )}
+
+        {/* Error Banner */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3 text-red-400 font-mono text-sm">
-            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-            <div>
-              <div className="font-bold mb-1">Supabase Connection Error</div>
-              <div className="text-xs opacity-80">{error}</div>
-              <button onClick={refreshData} className="mt-2 text-xs underline">Retry</button>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-5 flex items-start gap-3.5 text-red-400 font-mono text-sm">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-bold text-white mb-1">Supabase Live Connection Interrupted</div>
+              <p className="text-xs text-red-300/80 mb-3">{error}</p>
+              <button
+                onClick={refreshData}
+                className="px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-xs font-mono text-white hover:bg-red-500/30 transition-colors"
+              >
+                Reconnect Supabase
+              </button>
             </div>
           </div>
         )}
 
-        {!loading && !error && (
-          <>
-            {/* ── USERS TAB ────────────────────────────────────────── */}
-            {tab === 'users' && (
-              <div className="space-y-4">
-                {/* KPIs */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Registered Pioneers', val: users.length,                                      color: 'text-white' },
-                    { label: 'GPS Precision Locks', val: users.filter(u => u.location?.latitude).length,   color: 'text-green-400' },
-                    { label: 'Codes Available',     val: availableCodes.length,                             color: 'text-blue-400' },
-                    { label: 'Campaign Remaining',  val: remaining,                                         color: 'text-purple-400' },
-                  ].map(({ label, val, color }) => (
-                    <div key={label} className={kpiClass}>
-                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
-                      <span className={`font-mono text-2xl font-bold ${color}`}>{val}</span>
-                    </div>
+        {/* ── TAB 1: PIONEER REGISTRY & GPS ─────────────────────────────────── */}
+        {!loading && !error && tab === 'users' && (
+          <div className="space-y-6">
+            
+            {/* KPI Metrics Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/20 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold">
+                    Registered Pioneers
+                  </span>
+                  <Users size={16} className="text-signal" />
+                </div>
+                <div className="font-display text-2xl sm:text-3xl font-bold text-white">
+                  {users.length}
+                </div>
+                <div className="font-mono text-[10px] text-mist-700 mt-1">
+                  {((users.length / quota.totalQuota) * 100).toFixed(1)}% of {quota.totalQuota} target cap
+                </div>
+              </div>
+
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/20 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold">
+                    GPS Precision Locks
+                  </span>
+                  <Navigation size={16} className="text-emerald-400 rotate-45" />
+                </div>
+                <div className="font-display text-2xl sm:text-3xl font-bold text-emerald-400">
+                  {geoData.withGps}
+                </div>
+                <div className="font-mono text-[10px] text-mist-700 mt-1">
+                  {users.length > 0 ? Math.round((geoData.withGps / users.length) * 100) : 0}% telemetry rate ({geoData.highPrecision} ≤30m)
+                </div>
+              </div>
+
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/20 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold">
+                    Referral Inventory
+                  </span>
+                  <Key size={16} className="text-blue-400" />
+                </div>
+                <div className="font-display text-2xl sm:text-3xl font-bold text-blue-400">
+                  {availableCodes.length}
+                </div>
+                <div className="font-mono text-[10px] text-mist-700 mt-1">
+                  {redeemedCodes.length} redeemed passes logged
+                </div>
+              </div>
+
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-white/20 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold">
+                    Remaining Passes
+                  </span>
+                  <Sparkles size={16} className="text-purple-400" />
+                </div>
+                <div className="font-display text-2xl sm:text-3xl font-bold text-purple-400">
+                  {remaining}
+                </div>
+                <div className="font-mono text-[10px] text-mist-700 mt-1">
+                  {quota.manualRemaining !== null ? 'Manual slot override active' : 'Real-time auto calculated'}
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Controls Bar */}
+            <div className="bg-ink-900/80 border border-white/10 rounded-2xl p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                {/* Search */}
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mist-700" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search pioneer by name, email, ID, city, code…"
+                    className="w-full bg-ink-950 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-xs sm:text-sm font-mono focus:outline-none focus:border-signal/50 placeholder-mist-900 transition-colors"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-mist-700 hover:text-white"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Profession filter */}
+                <select
+                  value={profFilter}
+                  onChange={(e) => setProfFilter(e.target.value)}
+                  className="bg-ink-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-mono text-mist-100 focus:outline-none focus:border-signal/50"
+                >
+                  <option value="">All Disciplines ({professions.length})</option>
+                  {professions.map((p) => (
+                    <option key={p} value={p}>{p}</option>
                   ))}
+                </select>
+
+                {/* GPS lock filter */}
+                <select
+                  value={geoFilter}
+                  onChange={(e) => setGeoFilter(e.target.value)}
+                  className="bg-ink-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-mono text-mist-100 focus:outline-none focus:border-signal/50"
+                >
+                  <option value="all">All Telemetry</option>
+                  <option value="gps">GPS Fixed Only ({geoData.withGps})</option>
+                  <option value="nogps">No GPS ({users.length - geoData.withGps})</option>
+                </select>
+
+                {/* Sorting */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-ink-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-mono text-mist-100 focus:outline-none focus:border-signal/50"
+                >
+                  <option value="newest">Sort: Newest First</option>
+                  <option value="oldest">Sort: Oldest First</option>
+                  <option value="accuracy">Sort: Highest GPS Accuracy</option>
+                  <option value="name">Sort: Name (A-Z)</option>
+                </select>
+              </div>
+
+              {/* Export Buttons */}
+              <div className="flex items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/5">
+                <button
+                  onClick={exportCSV}
+                  className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-ink-800 border border-white/10 text-mist-100 hover:text-white hover:border-signal/40 text-xs font-mono font-medium flex items-center justify-center gap-2 transition-all"
+                >
+                  <Download size={13} className="text-signal" />
+                  <span>CSV with GPS</span>
+                </button>
+                <button
+                  onClick={exportJSON}
+                  className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-ink-800 border border-white/10 text-mist-100 hover:text-white hover:border-white/30 text-xs font-mono font-medium flex items-center justify-center gap-2 transition-all"
+                >
+                  <Download size={13} />
+                  <span>JSON</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Table / List View */}
+            {filteredUsers.length === 0 ? (
+              <div className="text-center py-20 bg-ink-900/40 border border-white/5 rounded-3xl p-8">
+                <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-3 text-mist-700">
+                  <Users size={22} />
                 </div>
+                <h4 className="font-display text-lg font-bold text-white mb-1">
+                  {users.length === 0 ? 'No Pioneers Registered' : 'No Matching Pioneers Found'}
+                </h4>
+                <p className="font-mono text-xs text-mist-700 max-w-sm mx-auto">
+                  {users.length === 0
+                    ? 'Incoming registration data with GPS telemetry will automatically stream here in real-time.'
+                    : 'Try clearing your search query or adjusting your discipline / GPS filters.'}
+                </p>
+              </div>
+            ) : (
+              <div className="bg-ink-900/80 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left font-mono text-xs">
+                    <thead>
+                      <tr className="bg-ink-950/80 border-b border-white/10 text-[10px] text-mist-700 uppercase tracking-widest">
+                        <th className="px-4 py-3.5 w-12 text-center">#</th>
+                        <th className="px-4 py-3.5">Pioneer Identity</th>
+                        <th className="px-4 py-3.5">Discipline &amp; Role</th>
+                        <th className="px-4 py-3.5">Pass Code</th>
+                        <th className="px-4 py-3.5">Geographic Location</th>
+                        <th className="px-4 py-3.5">Exact GPS Fix</th>
+                        <th className="px-4 py-3.5">Precision</th>
+                        <th className="px-4 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {filteredUsers.map((u, i) => {
+                        const hasCoords = u.location?.latitude != null && u.location?.longitude != null;
+                        const lat = hasCoords ? Number(u.location.latitude).toFixed(6) : null;
+                        const lng = hasCoords ? Number(u.location.longitude).toFixed(6) : null;
+                        const coordStr = hasCoords ? `${lat}, ${lng}` : null;
+                        const mapsUrl = hasCoords ? `https://www.google.com/maps?q=${u.location.latitude},${u.location.longitude}` : null;
 
-                {/* Search + Filter */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative flex-1">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, suburb, city, code…"
-                      className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-green-400/50 placeholder-gray-600" />
-                  </div>
-                  <select value={profFilter} onChange={e => setProfFilter(e.target.value)}
-                    className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-green-400/50">
-                    <option value="">All Professions</option>
-                    {professions.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <div className="flex gap-2">
-                    <button onClick={exportCSV} className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-1.5`}>
-                      <Download size={12} /> CSV with GPS
-                    </button>
-                    <button onClick={exportJSON} className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-1.5`}>
-                      <Download size={12} /> JSON
-                    </button>
-                  </div>
-                </div>
+                        return (
+                          <tr
+                            key={u.uuid || u.id}
+                            className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                            onClick={() => setSelectedUser(u)}
+                          >
+                            <td className="px-4 py-4 text-center text-mist-900 font-mono text-xs">
+                              {i + 1}
+                            </td>
 
-                {/* Table with Accurate Latitude, Longitude and Direct Google Maps link */}
-                {filteredUsers.length === 0 ? (
-                  <div className="text-center py-16 text-gray-600 font-mono text-sm">
-                    {users.length === 0 ? 'No users registered yet.' : 'No users match your search query.'}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-gray-800">
-                    <table className="w-full text-xs font-mono">
-                      <thead className="bg-gray-900 text-gray-500 uppercase tracking-wider text-[10px]">
-                        <tr>
-                          {['#','Pioneer','Profession','Referral','Area & City','Exact Coordinates (Lat, Lng)','GPS Accuracy','Google Maps Navigation','Registered'].map(h => (
-                            <th key={h} className="px-3.5 py-3 text-left whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-800/60">
-                        {filteredUsers.map((u, i) => {
-                          const hasCoords = u.location?.latitude != null && u.location?.longitude != null;
-                          const lat = hasCoords ? Number(u.location.latitude).toFixed(6) : null;
-                          const lng = hasCoords ? Number(u.location.longitude).toFixed(6) : null;
-                          const coordStr = hasCoords ? `${lat}, ${lng}` : null;
-                          const mapsUrl = hasCoords ? `https://www.google.com/maps?q=${u.location.latitude},${u.location.longitude}` : null;
-
-                          return (
-                            <tr key={u.uuid || u.id} className="hover:bg-gray-900/50 transition-colors">
-                              <td className="px-3.5 py-3 text-gray-500">{i + 1}</td>
-                              
-                              {/* User Info */}
-                              <td className="px-3.5 py-3 whitespace-nowrap">
-                                <div className="font-semibold text-white flex items-center gap-2">
-                                  <span>{u.name}</span>
-                                  <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20">
-                                    #{u.id}
-                                  </span>
+                            {/* Pioneer Identity */}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-signal/10 border border-signal/30 text-signal font-display font-bold flex items-center justify-center text-xs shrink-0">
+                                  {u.name ? u.name.charAt(0).toUpperCase() : 'P'}
                                 </div>
-                                <div className="text-gray-400 text-[11px] mt-0.5">{u.email}</div>
-                              </td>
-
-                              {/* Role */}
-                              <td className="px-3.5 py-3 text-gray-300 whitespace-nowrap">
-                                <div>{u.profession}</div>
-                                <div className="text-gray-500 text-[10px]">Age: {u.age}</div>
-                              </td>
-
-                              {/* Code */}
-                              <td className="px-3.5 py-3 text-green-400 font-semibold whitespace-nowrap">
-                                {u.referralCode}
-                              </td>
-
-                              {/* Location (Area + City + Country) */}
-                              <td className="px-3.5 py-3 whitespace-nowrap">
-                                <div className="text-white font-medium flex items-center gap-1.5">
-                                  <MapPin size={11} className="text-signal shrink-0" />
-                                  <span>{[u.location?.suburb, u.location?.city].filter(Boolean).join(', ') || u.location?.city || 'Undisclosed'}</span>
-                                </div>
-                                <div className="text-gray-500 text-[10px]">
-                                  {[u.location?.region, u.location?.country].filter(Boolean).join(', ')}
-                                  {u.location?.postalCode && ` · PIN: ${u.location.postalCode}`}
-                                </div>
-                              </td>
-
-                              {/* Exact GPS Coordinates with Copy button */}
-                              <td className="px-3.5 py-3 whitespace-nowrap">
-                                {hasCoords ? (
-                                  <div className="inline-flex items-center gap-1.5 bg-gray-900 border border-gray-700/80 px-2 py-1 rounded-md">
-                                    <span className="text-green-300 font-semibold select-all">{coordStr}</span>
-                                    <button
-                                      onClick={() => handleCopyCoords(`${u.location.latitude}, ${u.location.longitude}`)}
-                                      title="Copy coordinates to clipboard"
-                                      className="p-1 hover:text-white text-gray-400 transition-colors"
-                                    >
-                                      {copiedCoords === `${u.location.latitude}, ${u.location.longitude}` ? (
-                                        <Check size={11} className="text-green-400" />
-                                      ) : (
-                                        <Copy size={11} />
-                                      )}
-                                    </button>
+                                <div>
+                                  <div className="font-semibold text-white flex items-center gap-2">
+                                    <span>{u.name}</span>
+                                    <span className="font-mono text-[10px] text-signal bg-signal/10 px-1.5 py-0.2 rounded border border-signal/20">
+                                      #{u.id}
+                                    </span>
                                   </div>
-                                ) : (
-                                  <span className="text-gray-600 text-[11px]">No GPS fix</span>
-                                )}
-                              </td>
+                                  <div className="text-mist-700 text-[11px] font-mono mt-0.5">
+                                    {u.email}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
 
-                              {/* Accuracy badge */}
-                              <td className="px-3.5 py-3 whitespace-nowrap">
-                                {u.location?.accuracy != null ? (
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                      u.location.accuracy <= 30
-                                        ? 'bg-green-500/15 text-green-400 border-green-500/30'
-                                        : u.location.accuracy <= 100
-                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                        : u.location.accuracy <= 300
-                                        ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30'
-                                        : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
-                                    }`}
-                                  >
-                                    ±{Math.round(u.location.accuracy)}m {u.location.accuracy <= 30 ? 'Precision' : 'Accuracy'}
+                            {/* Profession */}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="text-mist-100 font-medium">{u.profession}</div>
+                              <div className="text-mist-900 text-[10px]">
+                                Age: {u.age || '—'}
+                              </div>
+                            </td>
+
+                            {/* Referral Code */}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className="font-mono text-xs font-semibold text-signal bg-signal/5 px-2 py-1 rounded-md border border-signal/20">
+                                {u.referralCode}
+                              </span>
+                            </td>
+
+                            {/* Location */}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5 text-white font-medium">
+                                <MapPin size={12} className="text-signal shrink-0" />
+                                <span>
+                                  {[u.location?.suburb, u.location?.city].filter(Boolean).join(', ') || u.location?.city || 'Undisclosed'}
+                                </span>
+                              </div>
+                              <div className="text-mist-700 text-[10px] pl-4">
+                                {[u.location?.region, u.location?.country].filter(Boolean).join(', ')}
+                                {u.location?.postalCode && ` • ${u.location.postalCode}`}
+                              </div>
+                            </td>
+
+                            {/* Coordinates with copy */}
+                            <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              {hasCoords ? (
+                                <div className="inline-flex items-center gap-1.5 bg-ink-950 border border-white/10 px-2.5 py-1 rounded-lg">
+                                  <span className="text-emerald-300 font-mono text-[11px] select-all">
+                                    {coordStr}
                                   </span>
-                                ) : (
-                                  <span className="text-gray-600">—</span>
-                                )}
-                              </td>
+                                  <button
+                                    onClick={() => handleCopyCoords(`${u.location.latitude}, ${u.location.longitude}`)}
+                                    title="Copy latitude &amp; longitude"
+                                    className="p-1 hover:text-white text-mist-700 transition-colors"
+                                  >
+                                    {copiedCoords === `${u.location.latitude}, ${u.location.longitude}` ? (
+                                      <Check size={11} className="text-emerald-400" />
+                                    ) : (
+                                      <Copy size={11} />
+                                    )}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-mist-900 text-[11px] italic">No GPS Lock</span>
+                              )}
+                            </td>
 
-                              {/* Open in Google Maps */}
-                              <td className="px-3.5 py-3 whitespace-nowrap">
-                                {hasCoords ? (
+                            {/* Precision */}
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              {u.location?.accuracy != null ? (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  u.location.accuracy <= 30
+                                    ? 'bg-signal/15 text-signal border-signal/30'
+                                    : u.location.accuracy <= 100
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                }`}>
+                                  ±{Math.round(u.location.accuracy)}m {u.location.accuracy <= 30 ? 'Precision' : ''}
+                                </span>
+                              ) : (
+                                <span className="text-mist-900">—</span>
+                              )}
+                            </td>
+
+                            {/* Row Action buttons */}
+                            <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {hasCoords && (
                                   <a
                                     href={mapsUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:text-white transition-all font-semibold"
+                                    title="Open coordinates in Google Maps"
+                                    className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 hover:text-white transition-all"
                                   >
-                                    <Navigation size={11} className="rotate-45" />
-                                    <span>Google Maps</span>
-                                    <ExternalLink size={10} />
+                                    <Navigation size={12} className="rotate-45" />
                                   </a>
-                                ) : (
-                                  <span className="text-gray-600 text-[11px]">Unavailable</span>
                                 )}
-                              </td>
-
-                              {/* Registered At */}
-                              <td className="px-3.5 py-3 text-gray-500 whitespace-nowrap">
-                                {u.registeredAt
-                                  ? new Date(u.registeredAt).toLocaleDateString('en-IN', {
-                                      day: '2-digit',
-                                      month: 'short',
-                                      year: '2-digit',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })
-                                  : '—'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── CODES TAB ────────────────────────────────────────── */}
-            {tab === 'codes' && (
-              <div className="space-y-4">
-                {/* KPIs */}
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: 'Total Codes',   val: codes.length,           color: 'text-white' },
-                    { label: 'Available',     val: availableCodes.length,  color: 'text-green-400' },
-                    { label: 'Redeemed',      val: redeemedCodes.length,   color: 'text-orange-400' },
-                  ].map(({ label, val, color }) => (
-                    <div key={label} className={kpiClass}>
-                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
-                      <span className={`font-mono text-2xl font-bold ${color}`}>{val}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Generate */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-                  <div className="font-mono text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Generate New Codes</div>
-                  <div className="flex flex-wrap gap-3 items-end">
-                    <div>
-                      <label className="font-mono text-[10px] text-gray-600 block mb-1">Count</label>
-                      <input type="number" min="1" max="100" value={genCount} onChange={e => setGenCount(e.target.value)}
-                        className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-400/50" />
-                    </div>
-                    <div>
-                      <label className="font-mono text-[10px] text-gray-600 block mb-1">Prefix</label>
-                      <input type="text" value={genPrefix} onChange={e => setGenPrefix(e.target.value.toUpperCase())} placeholder="NEXUS"
-                        className="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-400/50 uppercase" />
-                    </div>
-                    <button onClick={handleGenerate} disabled={genLoading}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-400/10 border border-green-400/30 text-green-400 font-mono text-xs font-semibold hover:bg-green-400/20 transition-colors disabled:opacity-50">
-                      {genLoading ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                      Generate
-                    </button>
-                  </div>
-                </div>
-
-                {/* Codes table */}
-                {codes.length === 0 ? (
-                  <div className="text-center py-12 text-gray-600 font-mono text-sm">No referral codes found.</div>
-                ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-gray-800">
-                    <table className="w-full text-xs font-mono">
-                      <thead className="bg-gray-900 text-gray-500 uppercase tracking-wider text-[10px]">
-                        <tr>
-                          {['Code','Status','Tags','Used By','Created',''].map(h => (
-                            <th key={h} className="px-3 py-3 text-left whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-800/60">
-                        {codes.map((c) => (
-                          <tr key={c.code} className="hover:bg-gray-900/50 transition-colors">
-                            <td className="px-3 py-3">
-                              <span className="text-white font-semibold tracking-wider">{c.code}</span>
-                            </td>
-                            <td className="px-3 py-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'available' ? 'bg-green-400/10 text-green-400' : 'bg-orange-400/10 text-orange-400'}`}>
-                                {c.status}
-                              </span>
-                            </td>
-                            <td className="px-3 py-3 text-gray-500">
-                              {c.tags?.map(t => (
-                                <span key={t} className="inline-block bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded text-[9px] mr-1">{t}</span>
-                              ))}
-                            </td>
-                            <td className="px-3 py-3 text-gray-400 max-w-[140px] truncate">{c.redeemedBy || '—'}</td>
-                            <td className="px-3 py-3 text-gray-600 whitespace-nowrap">
-                              {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => handleCopy(c.code)} title="Copy"
-                                  className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800 transition-colors">
-                                  {copied === c.code ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                                <button
+                                  onClick={() => handleResendConfirmation(u)}
+                                  disabled={resendingEmailId === u.id}
+                                  title="Resend Access Confirmation Email"
+                                  className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-mist-500 hover:text-signal hover:border-signal/30 transition-all disabled:opacity-50"
+                                >
+                                  {resendingEmailId === u.id ? (
+                                    <Loader2 size={12} className="animate-spin text-signal" />
+                                  ) : (
+                                    <Mail size={12} />
+                                  )}
                                 </button>
-                                {c.status === 'available' && (
-                                  <button onClick={() => handleDelete(c.code)} title="Delete"
-                                    className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-gray-800 transition-colors">
-                                    <Trash2 size={12} />
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handleDeleteSingleUser(u)}
+                                  title="Delete pioneer pass"
+                                  className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-mist-700 hover:text-red-400 hover:border-red-500/30 transition-all"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                                <button
+                                  onClick={() => setSelectedUser(u)}
+                                  title="View full dossier"
+                                  className="p-1.5 rounded-lg bg-signal/10 border border-signal/20 text-signal hover:bg-signal/20 transition-all ml-1"
+                                >
+                                  <ChevronRight size={12} />
+                                </button>
                               </div>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── GEO TAB ──────────────────────────────────────────── */}
-            {tab === 'geo' && (
-              <div className="space-y-4">
-                {users.length === 0 ? (
-                  <div className="text-center py-16 text-gray-600 font-mono text-sm">
-                    No users yet — register some to see geographic data.
-                  </div>
-                ) : (
-                  <>
-                    {/* Top candidate */}
-                    {geoData.rankedCities[0] && (
-                      <div className="bg-green-400/5 border border-green-400/20 rounded-2xl p-5 flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-green-400/10 border border-green-400/20 flex items-center justify-center text-green-400 shrink-0">
-                          <TrendingUp size={18} />
-                        </div>
-                        <div>
-                          <div className="font-mono text-[10px] text-green-400 uppercase tracking-widest mb-1">Top Expansion Candidate</div>
-                          <div className="font-mono text-lg font-bold text-white">
-                            {geoData.rankedCities[0].city}, {geoData.rankedCities[0].country}
-                          </div>
-                          <div className="font-mono text-xs text-gray-400">
-                            {geoData.rankedCities[0].count} registered users · {((geoData.rankedCities[0].count / users.length) * 100).toFixed(1)}% of total signups
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Ranked cities */}
-                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-800 font-mono text-xs text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-2">
-                        <MapPin size={12} /> City Rankings &amp; GPS Clusters
-                      </div>
-                      <div className="divide-y divide-gray-800/60">
-                        {geoData.rankedCities.map((c, i) => (
-                          <div key={`${c.city}|${c.country}`} className="px-4 py-3 flex items-center gap-3">
-                            <span className="font-mono text-xs text-gray-600 w-5 shrink-0">{i + 1}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-mono text-sm text-white">{c.city}</div>
-                              <div className="font-mono text-[10px] text-gray-500">{c.country}</div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <div className="font-mono text-sm font-bold text-white">{c.count}</div>
-                              <div className="font-mono text-[10px] text-gray-500">{((c.count / users.length) * 100).toFixed(1)}%</div>
-                            </div>
-                            <div className="w-20 shrink-0">
-                              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-green-400 rounded-full transition-all"
-                                  style={{ width: `${(c.count / geoData.rankedCities[0].count) * 100}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* GPS coverage */}
-                    <div className={kpiClass}>
-                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">GPS Precision Coverage</span>
-                      <span className="font-mono text-2xl font-bold text-blue-400">
-                        {Math.round((users.filter(u => u.location?.latitude).length / users.length) * 100)}%
-                      </span>
-                      <span className="font-mono text-[10px] text-gray-600">
-                        {users.filter(u => u.location?.latitude).length} of {users.length} users with exact coordinate fixes
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* ── SETTINGS TAB ─────────────────────────────────────── */}
-            {tab === 'settings' && (
-              <div className="space-y-4 max-w-lg">
-                {settingMsg && (
-                  <div className="bg-green-400/10 border border-green-400/20 rounded-xl px-4 py-2.5 font-mono text-xs text-green-400">
-                    {settingMsg}
-                  </div>
-                )}
-
-                {/* Quota control */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-4">
-                  <div className="font-mono text-xs text-gray-400 font-semibold uppercase tracking-wider">Quota Control</div>
-                  <div className="font-mono text-xs text-gray-500">
-                    Current: {quota.manualRemaining !== null ? `Manual override → ${quota.manualRemaining} slots` : `Auto (${quota.totalQuota} total − ${users.length} registered = ${remaining} remaining)`}
-                  </div>
-
-                  <div className="flex gap-2 items-end">
-                    <div className="flex-1">
-                      <label className="font-mono text-[10px] text-gray-600 block mb-1">Set manual remaining slots</label>
-                      <input type="number" min="0" value={newManual} onChange={e => setNewManual(e.target.value)} placeholder={remaining.toString()}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-400/50" />
-                    </div>
-                    <button onClick={doSetManual}
-                      className={`${btnClass} bg-green-400/10 border border-green-400/30 text-green-400 hover:bg-green-400/20`}>
-                      Set
-                    </button>
-                    <button onClick={doResetAuto}
-                      className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700`}>
-                      Reset to Auto
-                    </button>
-                  </div>
-
-                  <div className="flex gap-2 items-end">
-                    <div className="flex-1">
-                      <label className="font-mono text-[10px] text-gray-600 block mb-1">Change total quota (currently {quota.totalQuota})</label>
-                      <input type="number" min="1" value={newTotal} onChange={e => setNewTotal(e.target.value)} placeholder={quota.totalQuota.toString()}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-400/50" />
-                    </div>
-                    <button onClick={doSetTotal}
-                      className={`${btnClass} bg-blue-400/10 border border-blue-400/30 text-blue-400 hover:bg-blue-400/20`}>
-                      Update
-                    </button>
-                  </div>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* Export */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-                  <div className="font-mono text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Export Data</div>
-                  <div className="flex gap-3">
-                    <button onClick={exportCSV}
-                      className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-2`}>
-                      <Download size={12} /> Download CSV with GPS
-                    </button>
-                    <button onClick={exportJSON}
-                      className={`${btnClass} bg-gray-800 text-gray-300 hover:bg-gray-700 flex items-center gap-2`}>
-                      <Download size={12} /> Download JSON
-                    </button>
-                  </div>
+                <div className="bg-ink-950/60 border-t border-white/5 px-6 py-3 flex items-center justify-between font-mono text-[11px] text-mist-700">
+                  <span>Showing {filteredUsers.length} of {users.length} registered pioneers</span>
+                  <span>Click any row to open full architect dossier</span>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
 
-                {/* Danger zone */}
-                <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
-                  <div className="font-mono text-xs text-red-400 font-semibold uppercase tracking-wider mb-2">Danger Zone</div>
-                  <div className="font-mono text-[11px] text-gray-500 mb-3">
-                    Permanently delete all registered users and reset all referral codes to available.
+        {/* ── TAB 2: REFERRAL ENGINE ────────────────────────────────────────── */}
+        {!loading && !error && tab === 'codes' && (
+          <div className="space-y-6">
+            
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-5">
+                <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold block mb-1">
+                  Total Managed Codes
+                </span>
+                <div className="font-display text-3xl font-bold text-white">{codes.length}</div>
+              </div>
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-5">
+                <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold block mb-1">
+                  Active &amp; Available
+                </span>
+                <div className="font-display text-3xl font-bold text-emerald-400">{availableCodes.length}</div>
+              </div>
+              <div className="bg-ink-900/70 border border-white/10 rounded-2xl p-5">
+                <span className="font-mono text-[10px] text-mist-700 uppercase tracking-widest font-semibold block mb-1">
+                  Claimed &amp; Redeemed
+                </span>
+                <div className="font-display text-3xl font-bold text-amber-400">{redeemedCodes.length}</div>
+              </div>
+            </div>
+
+            {/* Creation Panels */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Batch generator */}
+              <div className="bg-ink-900/80 border border-white/10 rounded-2xl p-5">
+                <div className="font-display text-base font-bold text-white mb-1 flex items-center gap-2">
+                  <Sparkles size={16} className="text-signal" />
+                  <span>Batch Code Generator</span>
+                </div>
+                <p className="font-mono text-xs text-mist-700 mb-4">
+                  Generate unique cryptographic invite codes with custom studio prefixes.
+                </p>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="font-mono text-[10px] text-mist-700 block mb-1.5">Count</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={genCount}
+                      onChange={(e) => setGenCount(e.target.value)}
+                      className="w-20 bg-ink-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-signal"
+                    />
                   </div>
-                  <button onClick={doReset}
-                    className={`${btnClass} bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20`}>
-                    Reset Entire Database
+                  <div>
+                    <label className="font-mono text-[10px] text-mist-700 block mb-1.5">Prefix</label>
+                    <input
+                      type="text"
+                      value={genPrefix}
+                      onChange={(e) => setGenPrefix(e.target.value.toUpperCase())}
+                      placeholder="NEXUS"
+                      className="w-32 bg-ink-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-xs uppercase focus:outline-none focus:border-signal"
+                    />
+                  </div>
+                  <button
+                    onClick={handleGenerateBatch}
+                    disabled={genLoading}
+                    className="px-4 py-2 rounded-xl bg-signal text-ink-950 font-mono text-xs font-bold hover:bg-signal-dim transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-lg shadow-signal/15"
+                  >
+                    {genLoading ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                    <span>Generate Batch</span>
                   </button>
                 </div>
               </div>
+
+              {/* Single custom code */}
+              <form onSubmit={handleCreateCustomCode} className="bg-ink-900/80 border border-white/10 rounded-2xl p-5">
+                <div className="font-display text-base font-bold text-white mb-1 flex items-center gap-2">
+                  <Key size={16} className="text-blue-400" />
+                  <span>Custom VIP Pass</span>
+                </div>
+                <p className="font-mono text-xs text-mist-700 mb-4">
+                  Mint a specific vanity pass code for partners, conferences, or VIP studios.
+                </p>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="font-mono text-[10px] text-mist-700 block mb-1.5">Pass Code</label>
+                    <input
+                      type="text"
+                      required
+                      value={customCode}
+                      onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. ZAHA-VIP-2026"
+                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-xs uppercase focus:outline-none focus:border-signal"
+                    />
+                  </div>
+                  <div className="w-28">
+                    <label className="font-mono text-[10px] text-mist-700 block mb-1.5">Tag</label>
+                    <input
+                      type="text"
+                      value={customTag}
+                      onChange={(e) => setCustomTag(e.target.value)}
+                      placeholder="VIP, CAD"
+                      className="w-full bg-ink-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-signal"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={genLoading || !customCode.trim()}
+                    className="px-4 py-2 rounded-xl bg-blue-500 text-white font-mono text-xs font-bold hover:bg-blue-600 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Plus size={13} />
+                    <span>Create Code</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Filter and Code List */}
+            <div className="bg-ink-900/80 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
+              <div className="flex gap-3 items-center w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-mist-700" />
+                  <input
+                    type="text"
+                    value={codeSearch}
+                    onChange={(e) => setCodeSearch(e.target.value)}
+                    placeholder="Search codes, users, tags…"
+                    className="w-full bg-ink-950 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs font-mono text-white focus:outline-none focus:border-signal"
+                  />
+                </div>
+                <select
+                  value={codeStatusFilter}
+                  onChange={(e) => setCodeStatusFilter(e.target.value)}
+                  className="bg-ink-950 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-mist-100 focus:outline-none focus:border-signal"
+                >
+                  <option value="all">All Statuses ({codes.length})</option>
+                  <option value="available">Available ({availableCodes.length})</option>
+                  <option value="redeemed">Redeemed ({redeemedCodes.length})</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handleCopyAllAvailableCodes}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-ink-800 border border-white/10 text-mist-100 hover:text-white hover:border-signal/40 text-xs font-mono flex items-center justify-center gap-2 transition-all"
+              >
+                <Copy size={13} className="text-signal" />
+                <span>Copy All Available Codes ({availableCodes.length})</span>
+              </button>
+            </div>
+
+            {/* Codes Table */}
+            <div className="bg-ink-900/80 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-mono text-xs">
+                  <thead>
+                    <tr className="bg-ink-950/80 border-b border-white/10 text-[10px] text-mist-700 uppercase tracking-widest">
+                      <th className="px-5 py-3.5">Referral Code</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5">Tags</th>
+                      <th className="px-5 py-3.5">Redeemed By</th>
+                      <th className="px-5 py-3.5">Created Date</th>
+                      <th className="px-5 py-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {filteredCodes.map((c) => (
+                      <tr key={c.code} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-5 py-3.5 font-semibold text-white tracking-wider">
+                          <span className="font-mono text-signal">{c.code}</span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                            c.status === 'available'
+                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                          }`}>
+                            {c.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex flex-wrap gap-1">
+                            {c.tags?.map((t) => (
+                              <span key={t} className="bg-ink-950 border border-white/10 text-mist-500 px-2 py-0.5 rounded text-[10px]">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-mist-500 truncate max-w-[180px]">
+                          {c.redeemedBy || '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-mist-700 whitespace-nowrap">
+                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleCopyCode(c.code)}
+                              title="Copy code"
+                              className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-mist-500 hover:text-white transition-colors"
+                            >
+                              {copied === c.code ? <Check size={13} className="text-signal" /> : <Copy size={13} />}
+                            </button>
+                            {c.status === 'available' && (
+                              <button
+                                onClick={() => handleDeleteCode(c.code)}
+                                title="Delete code"
+                                className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-mist-700 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 3: GEO ANALYTICS & LABS ───────────────────────────────────── */}
+        {!loading && !error && tab === 'geo' && (
+          <div className="space-y-6">
+            
+            {users.length === 0 ? (
+              <div className="text-center py-20 bg-ink-900/40 border border-white/5 rounded-3xl p-8">
+                <Globe size={32} className="mx-auto text-mist-700 mb-3" />
+                <h4 className="font-display text-lg font-bold text-white mb-1">No Geographic Data Available</h4>
+                <p className="font-mono text-xs text-mist-700">Pioneer registrations with GPS fixes will populate the research map.</p>
+              </div>
+            ) : (
+              <>
+                {/* Top Research Candidate */}
+                {geoData.rankedCities[0] && (
+                  <div className="bg-gradient-to-r from-signal/15 via-ink-900 to-ink-900 border border-signal/30 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl shadow-signal/5">
+                    <div className="flex items-start gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-signal/20 border border-signal/40 flex items-center justify-center text-signal shrink-0 shadow-lg shadow-signal/20">
+                        <TrendingUp size={26} />
+                      </div>
+                      <div>
+                        <div className="font-mono text-[10px] text-signal uppercase tracking-widest font-bold mb-1">
+                          Strategic Expansion Lab Candidate #1
+                        </div>
+                        <h3 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                          {geoData.rankedCities[0].city}, {geoData.rankedCities[0].country}
+                        </h3>
+                        <p className="font-mono text-xs text-mist-700 mt-1">
+                          {geoData.rankedCities[0].count} Verified Pioneer Signups • {((geoData.rankedCities[0].count / users.length) * 100).toFixed(1)}% density index
+                          {geoData.rankedCities[0].avgAccuracy && ` • Avg GPS Accuracy ±${geoData.rankedCities[0].avgAccuracy}m`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${geoData.rankedCities[0].city}, ${geoData.rankedCities[0].country}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-3 rounded-full bg-signal text-ink-950 font-display font-semibold text-xs sm:text-sm hover:bg-signal-dim transition-all flex items-center gap-2 shadow-lg shadow-signal/20 shrink-0"
+                    >
+                      <Navigation size={14} className="rotate-45" />
+                      <span>Inspect Hub Area in Maps</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                )}
+
+                {/* Ranked Hubs Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* City Rankings */}
+                  <div className="lg:col-span-2 bg-ink-900/80 border border-white/10 rounded-3xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                      <div className="font-display font-bold text-white text-sm flex items-center gap-2">
+                        <MapPin size={15} className="text-signal" />
+                        <span>Metropolitan Density Rankings</span>
+                      </div>
+                      <span className="font-mono text-[10px] text-mist-700">
+                        {geoData.rankedCities.length} Global Hubs
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-white/5">
+                      {geoData.rankedCities.map((c, i) => (
+                        <div key={`${c.city}|${c.country}`} className="px-6 py-4 flex items-center gap-4 hover:bg-white/[0.01] transition-colors">
+                          <span className="font-mono text-xs font-bold text-mist-700 w-6">
+                            #{i + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-white text-sm flex items-center gap-2">
+                              <span>{c.city}</span>
+                              <span className="text-mist-700 text-xs font-mono font-normal">({c.country})</span>
+                            </div>
+                            <div className="font-mono text-[10px] text-mist-900 mt-0.5">
+                              {c.gpsCount} of {c.count} fixes verified
+                              {c.avgAccuracy && ` • ±${c.avgAccuracy}m accuracy`}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="font-mono font-bold text-sm text-white">{c.count}</div>
+                            <div className="font-mono text-[10px] text-mist-700">
+                              {((c.count / users.length) * 100).toFixed(1)}%
+                            </div>
+                          </div>
+
+                          {/* Meter bar */}
+                          <div className="w-24 sm:w-32 shrink-0">
+                            <div className="h-2 bg-ink-950 rounded-full overflow-hidden border border-white/5">
+                              <div
+                                className="h-full bg-signal rounded-full transition-all"
+                                style={{
+                                  width: `${(c.count / (geoData.rankedCities[0]?.count || 1)) * 100}%`
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Country Breakdown & Telemetry */}
+                  <div className="space-y-4">
+                    <div className="bg-ink-900/80 border border-white/10 rounded-3xl p-6">
+                      <div className="font-display font-bold text-white text-sm mb-4 flex items-center gap-2">
+                        <Globe size={15} className="text-blue-400" />
+                        <span>Territorial Breakdown</span>
+                      </div>
+                      <div className="space-y-3 font-mono text-xs">
+                        {Object.entries(geoData.countries).map(([country, count]) => (
+                          <div key={country} className="flex justify-between items-center border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                            <span className="text-mist-500">{country}</span>
+                            <span className="font-bold text-white bg-white/5 px-2 py-0.5 rounded">
+                              {count} pioneers
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-ink-900/80 border border-white/10 rounded-3xl p-6">
+                      <div className="font-display font-bold text-white text-sm mb-2 flex items-center gap-2">
+                        <Radio size={15} className="text-signal animate-pulse" />
+                        <span>Telemetry Accuracy Index</span>
+                      </div>
+                      <p className="font-mono text-xs text-mist-700 mb-4">
+                        W3C Geolocation API with Nominatim reverse geocoding cache.
+                      </p>
+                      <div className="space-y-2 font-mono text-xs">
+                        <div className="flex justify-between text-mist-500">
+                          <span>Total Telemetry Fixes</span>
+                          <span className="text-white font-bold">{geoData.withGps} / {users.length}</span>
+                        </div>
+                        <div className="flex justify-between text-mist-500">
+                          <span>Sub-30m Precision Fixes</span>
+                          <span className="text-signal font-bold">{geoData.highPrecision}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
-          </>
+          </div>
+        )}
+
+        {/* ── TAB 4: STUDIO CONTROLS & SETTINGS ──────────────────────────────── */}
+        {!loading && !error && tab === 'settings' && (
+          <div className="space-y-6 max-w-2xl">
+            {settingMsg && (
+              <div className="bg-signal/10 border border-signal/30 rounded-2xl px-5 py-3 font-mono text-xs text-signal flex items-center gap-2">
+                <CheckCircle2 size={14} />
+                <span>{settingMsg}</span>
+              </div>
+            )}
+
+            {/* Campaign Quota Controls */}
+            <div className="bg-ink-900/80 border border-white/10 rounded-3xl p-6 space-y-5">
+              <div>
+                <h4 className="font-display text-base font-bold text-white">Campaign Quota Controls</h4>
+                <p className="font-mono text-xs text-mist-700 mt-0.5">
+                  Currently: {quota.manualRemaining !== null
+                    ? `Manual Override Mode (${quota.manualRemaining} slots displayed)`
+                    : `Dynamic Mode (${quota.totalQuota} max cap − ${users.length} registered = ${remaining} slots remaining)`}
+                </p>
+              </div>
+
+              {/* Set manual slots */}
+              <div className="space-y-2">
+                <label className="font-mono text-xs text-mist-500 block">
+                  Force Manual Remaining Slots Count
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={newManual}
+                    onChange={(e) => setNewManual(e.target.value)}
+                    placeholder={`Current: ${remaining}`}
+                    className="flex-1 bg-ink-950 border border-white/10 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-signal"
+                  />
+                  <button
+                    onClick={doSetManual}
+                    className="px-4 py-2.5 rounded-xl bg-signal text-ink-950 font-mono text-xs font-bold hover:bg-signal-dim transition-all"
+                  >
+                    Apply Override
+                  </button>
+                  <button
+                    onClick={doResetAuto}
+                    className="px-4 py-2.5 rounded-xl bg-ink-800 border border-white/10 text-mist-100 font-mono text-xs hover:border-white/30 transition-all"
+                  >
+                    Reset to Dynamic
+                  </button>
+                </div>
+              </div>
+
+              {/* Change total quota */}
+              <div className="space-y-2 pt-4 border-t border-white/5">
+                <label className="font-mono text-xs text-mist-500 block">
+                  Adjust Total Campaign Quota Cap
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={newTotal}
+                    onChange={(e) => setNewTotal(e.target.value)}
+                    placeholder={`Current total: ${quota.totalQuota}`}
+                    className="flex-1 bg-ink-950 border border-white/10 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-signal"
+                  />
+                  <button
+                    onClick={doSetTotal}
+                    className="px-4 py-2.5 rounded-xl bg-blue-500 text-white font-mono text-xs font-bold hover:bg-blue-600 transition-all"
+                  >
+                    Update Total Cap
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Export Panel */}
+            <div className="bg-ink-900/80 border border-white/10 rounded-3xl p-6">
+              <h4 className="font-display text-base font-bold text-white mb-1">Telemetry Data Exports</h4>
+              <p className="font-mono text-xs text-mist-700 mb-4">
+                Export registered architect records with verified coordinates and pass codes.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={exportCSV}
+                  className="px-4 py-2.5 rounded-xl bg-ink-800 border border-white/10 text-mist-100 hover:text-white hover:border-signal/40 font-mono text-xs font-semibold flex items-center gap-2 transition-all"
+                >
+                  <Download size={14} className="text-signal" />
+                  <span>Download Full CSV (GPS + Details)</span>
+                </button>
+                <button
+                  onClick={exportJSON}
+                  className="px-4 py-2.5 rounded-xl bg-ink-800 border border-white/10 text-mist-100 hover:text-white hover:border-white/30 font-mono text-xs font-semibold flex items-center gap-2 transition-all"
+                >
+                  <Download size={14} />
+                  <span>Download JSON Database Dump</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Danger Zone */}
+            <div className="bg-red-500/5 border border-red-500/20 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-red-400 font-display font-bold text-base">
+                <AlertTriangle size={18} />
+                <span>Danger Zone — Studio Reset</span>
+              </div>
+              <p className="font-mono text-xs text-mist-700 leading-relaxed">
+                Permanently wipes all registered pioneer records from Supabase, restores the default VIP referral code roster, and resets the quota to 1,000 slots.
+              </p>
+              <button
+                onClick={doResetEntireStore}
+                className={`px-5 py-2.5 rounded-xl font-mono text-xs font-bold transition-all ${
+                  resetConfirm
+                    ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
+                    : 'bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20'
+                }`}
+              >
+                {resetConfirm ? 'CONFIRM PERMANENT RESET NOW' : 'Reset Entire Database'}
+              </button>
+            </div>
+          </div>
         )}
       </main>
+
+      {/* ── Slide-Over Pioneer Dossier Inspector ─────────────────────────────── */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-[210] flex justify-end">
+          <div
+            onClick={() => setSelectedUser(null)}
+            className="fixed inset-0 bg-ink-950/80 backdrop-blur-sm transition-opacity"
+          />
+
+          <div className="relative w-full max-w-lg bg-ink-900 border-l border-white/15 h-full overflow-y-auto p-6 sm:p-8 flex flex-col justify-between shadow-2xl z-10 animate-slide-in">
+            <div className="space-y-6">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-signal/15 border border-signal/40 flex items-center justify-center text-signal font-display font-bold text-base">
+                    {selectedUser.name ? selectedUser.name.charAt(0).toUpperCase() : 'P'}
+                  </div>
+                  <div>
+                    <span className="font-mono text-[10px] text-signal uppercase tracking-widest block font-bold">
+                      Verified Pioneer Dossier
+                    </span>
+                    <h3 className="font-display text-xl font-bold text-white">
+                      {selectedUser.name}
+                    </h3>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedUser(null)}
+                  className="p-1.5 rounded-full text-mist-700 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Identity & Access Card */}
+              <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 font-mono text-xs space-y-3">
+                <div className="flex justify-between pb-2 border-b border-white/5">
+                  <span className="text-mist-700">Member ID:</span>
+                  <span className="font-bold text-signal">#{selectedUser.id}</span>
+                </div>
+                <div className="flex justify-between pb-2 border-b border-white/5">
+                  <span className="text-mist-700">Email Address:</span>
+                  <span className="text-white select-all">{selectedUser.email}</span>
+                </div>
+                <div className="flex justify-between pb-2 border-b border-white/5">
+                  <span className="text-mist-700">Discipline:</span>
+                  <span className="text-white font-medium">{selectedUser.profession}</span>
+                </div>
+                <div className="flex justify-between pb-2 border-b border-white/5">
+                  <span className="text-mist-700">Age:</span>
+                  <span className="text-white">{selectedUser.age || '—'}</span>
+                </div>
+                <div className="flex justify-between pb-2 border-b border-white/5">
+                  <span className="text-mist-700">Invitation Pass:</span>
+                  <span className="text-emerald-400 font-bold">{selectedUser.referralCode}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-mist-700">Registration Date:</span>
+                  <span className="text-mist-500">
+                    {selectedUser.registeredAt ? new Date(selectedUser.registeredAt).toLocaleString() : '—'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Geographic Telemetry Card */}
+              <div className="bg-ink-950 border border-white/10 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-white font-display font-bold text-sm">
+                    <MapPin size={15} className="text-signal" />
+                    <span>Geographic Telemetry</span>
+                  </div>
+                  {selectedUser.location?.accuracy != null && (
+                    <span className="font-mono text-[10px] text-signal bg-signal/10 px-2 py-0.5 rounded-full border border-signal/20">
+                      ±{Math.round(selectedUser.location.accuracy)}m Fix
+                    </span>
+                  )}
+                </div>
+
+                <div className="font-mono text-xs space-y-2 text-mist-500 pt-2 border-t border-white/5">
+                  <div className="flex justify-between">
+                    <span>Resolved Area:</span>
+                    <span className="text-white text-right">
+                      {[selectedUser.location?.suburb, selectedUser.location?.city].filter(Boolean).join(', ') || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Region &amp; Country:</span>
+                    <span className="text-white text-right">
+                      {[selectedUser.location?.region, selectedUser.location?.country].filter(Boolean).join(', ') || '—'}
+                    </span>
+                  </div>
+                  {selectedUser.location?.postalCode && (
+                    <div className="flex justify-between">
+                      <span>Postal PIN:</span>
+                      <span className="text-white">{selectedUser.location.postalCode}</span>
+                    </div>
+                  )}
+                  {selectedUser.location?.latitude != null && (
+                    <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                      <span>Exact Coordinates:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-300 font-bold select-all">
+                          {Number(selectedUser.location.latitude).toFixed(6)}, {Number(selectedUser.location.longitude).toFixed(6)}
+                        </span>
+                        <button
+                          onClick={() => handleCopyCoords(`${selectedUser.location.latitude}, ${selectedUser.location.longitude}`)}
+                          className="p-1 hover:text-white text-mist-700"
+                        >
+                          <Copy size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Maps Link */}
+                {selectedUser.location?.latitude != null && selectedUser.location?.longitude != null && (
+                  <a
+                    href={`https://www.google.com/maps?q=${selectedUser.location.latitude},${selectedUser.location.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full mt-3 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 hover:text-white font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Navigation size={13} className="rotate-45" />
+                    <span>Open in Google Maps Route Navigation</span>
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="pt-6 border-t border-white/10 flex flex-col gap-2.5">
+              <button
+                onClick={() => handleResendConfirmation(selectedUser)}
+                disabled={resendingEmailId === selectedUser.id}
+                className="w-full py-3 rounded-full bg-signal text-ink-950 font-display font-semibold text-xs sm:text-sm hover:bg-signal-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-signal/20 disabled:opacity-50"
+              >
+                {resendingEmailId === selectedUser.id ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Mail size={15} />
+                )}
+                <span>Resend Confirmation Email Pass</span>
+              </button>
+
+              <button
+                onClick={() => handleDeleteSingleUser(selectedUser)}
+                className="w-full py-2.5 rounded-full bg-ink-950 border border-red-500/30 text-red-400 hover:bg-red-500/10 font-mono text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+              >
+                <Trash2 size={13} />
+                <span>Delete Pioneer Record</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -109,6 +109,25 @@ export const generateReferralCodes = async (count = 5, prefix = 'NEXUS') => {
   return (data || []).map(mapCode);
 };
 
+export const deleteUser = async (idOrUuid) => {
+  const { error } = await supabase
+    .from('nexus_users')
+    .delete()
+    .or(`id.eq.${idOrUuid},user_code.eq.${idOrUuid}`);
+  if (error) throw error;
+  dispatchUpdate();
+};
+
+export const createCustomReferralCode = async (code, tags = ['VIP']) => {
+  const clean = code.trim().toUpperCase();
+  const { data, error } = await supabase
+    .from('nexus_referral_codes')
+    .insert([{ code: clean, status: 'available', tags }])
+    .select();
+  if (error) throw error;
+  return mapCode(data[0]);
+};
+
 export const deleteReferralCode = async (code) => {
   const { error } = await supabase.from('nexus_referral_codes').delete().eq('code', code);
   if (error) throw error;
